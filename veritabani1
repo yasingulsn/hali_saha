@@ -1,0 +1,721 @@
+--
+-- PostgreSQL database dump
+--
+
+\restrict XgTOYqqueleg6KRklRrjXoefQMwXtp8rXNzfnYUqYLMNkiuCybP5CSffdXrA4rR
+
+-- Dumped from database version 18.1
+-- Dumped by pg_dump version 18.1
+
+-- Started on 2026-04-14 20:35:09
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 2 (class 3079 OID 47617)
+-- Name: uuid-ossp; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
+
+
+--
+-- TOC entry 5176 (class 0 OID 0)
+-- Dependencies: 2
+-- Name: EXTENSION "uuid-ossp"; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UUIDs)';
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 228 (class 1259 OID 47777)
+-- Name: bildirim_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.bildirim_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    alici_id uuid,
+    baslik character varying(200) NOT NULL,
+    mesaj text NOT NULL,
+    bildirim_tipi character varying(50),
+    ilgili_ilan_id uuid,
+    okundu_mu boolean DEFAULT false,
+    olusturulma_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.bildirim_tb OWNER TO postgres;
+
+--
+-- TOC entry 230 (class 1259 OID 47825)
+-- Name: giris_gecmisi_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.giris_gecmisi_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    kullanici_id uuid,
+    isletme_id uuid,
+    kullanici_tipi character varying(20) NOT NULL,
+    ip_adresi character varying(50),
+    cihaz_bilgisi text,
+    basarili_mi boolean NOT NULL,
+    hata_mesaji text,
+    giris_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.giris_gecmisi_tb OWNER TO postgres;
+
+--
+-- TOC entry 232 (class 1259 OID 47861)
+-- Name: hesap_kilitleme_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.hesap_kilitleme_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    email character varying(150) NOT NULL,
+    basarisiz_deneme_sayisi integer DEFAULT 0,
+    son_basarisiz_deneme timestamp with time zone,
+    kilitleme_tarihi timestamp with time zone,
+    kilit_bitis_tarihi timestamp with time zone,
+    kilitli_mi boolean DEFAULT false
+);
+
+
+ALTER TABLE public.hesap_kilitleme_tb OWNER TO postgres;
+
+--
+-- TOC entry 224 (class 1259 OID 47700)
+-- Name: ilan_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.ilan_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    olusturan_id uuid NOT NULL,
+    is_takim_ilani boolean DEFAULT false,
+    ilgili_takim_id uuid,
+    eksik_kisi_sayisi integer,
+    aranan_mevki character varying(50),
+    yas_araligi_min integer,
+    yas_araligi_max integer,
+    saha_id uuid,
+    ozel_konum_adi text,
+    mac_saati timestamp with time zone,
+    aciklama text,
+    ilan_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    aktif_mi boolean DEFAULT true,
+    ilan_tipi character varying(50),
+    rekabet_seviyesi character varying(50)
+);
+
+
+ALTER TABLE public.ilan_tb OWNER TO postgres;
+
+--
+-- TOC entry 221 (class 1259 OID 47644)
+-- Name: isletme_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.isletme_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    isletme_adi character varying(200) NOT NULL,
+    yetkili_ad_soyad character varying(100) NOT NULL,
+    email character varying(150) NOT NULL,
+    sifre text NOT NULL,
+    telefon character varying(20) NOT NULL,
+    vergi_no character varying(50),
+    adres text,
+    onayli_mi boolean DEFAULT false,
+    kayit_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    konum_enlem double precision,
+    konum_boylam double precision,
+    son_giris_tarihi timestamp with time zone,
+    email_dogrulanmis boolean DEFAULT false,
+    hesap_durumu character varying(20) DEFAULT 'AKTIF'::character varying
+);
+
+
+ALTER TABLE public.isletme_tb OWNER TO postgres;
+
+--
+-- TOC entry 225 (class 1259 OID 47728)
+-- Name: kullanici_istatistik_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.kullanici_istatistik_tb (
+    kullanici_id uuid NOT NULL,
+    toplam_mac_sayisi integer DEFAULT 0,
+    gol_sayisi integer DEFAULT 0,
+    asist_sayisi integer DEFAULT 0,
+    macin_adami_odulu integer DEFAULT 0,
+    disiplin_puani numeric(3,2) DEFAULT 5.00,
+    kazanma_orani numeric(5,2) DEFAULT 0.00,
+    son_mac_tarihi timestamp with time zone
+);
+
+
+ALTER TABLE public.kullanici_istatistik_tb OWNER TO postgres;
+
+--
+-- TOC entry 227 (class 1259 OID 47762)
+-- Name: kullanici_musaitlik_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.kullanici_musaitlik_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    kullanici_id uuid,
+    tercih_edilen_bolge character varying(100),
+    haftanin_gunu integer,
+    baslangic_saati time without time zone,
+    bitis_saati time without time zone,
+    her_saat_uygun boolean DEFAULT false,
+    aktif_mi boolean DEFAULT true
+);
+
+
+ALTER TABLE public.kullanici_musaitlik_tb OWNER TO postgres;
+
+--
+-- TOC entry 220 (class 1259 OID 47628)
+-- Name: kullanici_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.kullanici_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    ad_soyad character varying(100) NOT NULL,
+    email character varying(150) NOT NULL,
+    sifre text NOT NULL,
+    telefon character varying(20),
+    profil_foto_url text,
+    kayit_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    aktif_mi boolean DEFAULT true,
+    dogum_tarihi date,
+    "puan_ortalaması" numeric(3,2) DEFAULT 0.0,
+    yorum_sayisi integer DEFAULT 0,
+    son_enlem double precision,
+    son_boylam double precision,
+    son_giris_tarihi timestamp with time zone,
+    email_dogrulanmis boolean DEFAULT false,
+    hesap_durumu character varying(20) DEFAULT 'AKTIF'::character varying,
+    CONSTRAINT puan_araligi_kontrol CHECK ((("puan_ortalaması" >= (0)::numeric) AND ("puan_ortalaması" <= (5)::numeric)))
+);
+
+
+ALTER TABLE public.kullanici_tb OWNER TO postgres;
+
+--
+-- TOC entry 229 (class 1259 OID 47800)
+-- Name: refresh_token_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.refresh_token_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    kullanici_id uuid,
+    isletme_id uuid,
+    kullanici_tipi character varying(20) NOT NULL,
+    token_hash text NOT NULL,
+    cihaz_bilgisi text,
+    ip_adresi character varying(50),
+    son_kullanim_tarihi timestamp with time zone,
+    olusturulma_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    gecerlilik_tarihi timestamp with time zone NOT NULL,
+    iptal_edildi_mi boolean DEFAULT false,
+    CONSTRAINT chk_kullanici_tipi CHECK (((kullanici_tipi)::text = ANY ((ARRAY['KULLANICI'::character varying, 'ISLETME'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.refresh_token_tb OWNER TO postgres;
+
+--
+-- TOC entry 231 (class 1259 OID 47837)
+-- Name: sifre_sifirlama_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.sifre_sifirlama_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    kullanici_id uuid,
+    isletme_id uuid,
+    kullanici_tipi character varying(20) NOT NULL,
+    token_hash text NOT NULL,
+    gecerlilik_tarihi timestamp with time zone NOT NULL,
+    kullanildi_mi boolean DEFAULT false,
+    olusturulma_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.sifre_sifirlama_tb OWNER TO postgres;
+
+--
+-- TOC entry 226 (class 1259 OID 47745)
+-- Name: takim_istatistik_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.takim_istatistik_tb (
+    takim_id uuid NOT NULL,
+    toplam_mac_sayisi integer DEFAULT 0,
+    galibiyet_sayisi integer DEFAULT 0,
+    beraberlik_sayisi integer DEFAULT 0,
+    maglubiyet_sayisi integer DEFAULT 0,
+    son_mac_tarihi timestamp with time zone,
+    ortalama_aktiflik_puani numeric(3,2) DEFAULT 0.00,
+    uygulamaya_son_giris_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.takim_istatistik_tb OWNER TO postgres;
+
+--
+-- TOC entry 222 (class 1259 OID 47665)
+-- Name: takim_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.takim_tb (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    takim_adi character varying(100) NOT NULL,
+    kurucu_id uuid,
+    logo_url text,
+    kurulus_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    puan_ortalamasi numeric(3,2) DEFAULT 0.0,
+    oyuncu_ariyor_mu boolean DEFAULT false
+);
+
+
+ALTER TABLE public.takim_tb OWNER TO postgres;
+
+--
+-- TOC entry 223 (class 1259 OID 47682)
+-- Name: takim_uyeleri_tb; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.takim_uyeleri_tb (
+    takim_id uuid NOT NULL,
+    kullanici_id uuid NOT NULL,
+    katilma_tarihi timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.takim_uyeleri_tb OWNER TO postgres;
+
+--
+-- TOC entry 5166 (class 0 OID 47777)
+-- Dependencies: 228
+-- Data for Name: bildirim_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.bildirim_tb (id, alici_id, baslik, mesaj, bildirim_tipi, ilgili_ilan_id, okundu_mu, olusturulma_tarihi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5168 (class 0 OID 47825)
+-- Dependencies: 230
+-- Data for Name: giris_gecmisi_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.giris_gecmisi_tb (id, kullanici_id, isletme_id, kullanici_tipi, ip_adresi, cihaz_bilgisi, basarili_mi, hata_mesaji, giris_tarihi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5170 (class 0 OID 47861)
+-- Dependencies: 232
+-- Data for Name: hesap_kilitleme_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.hesap_kilitleme_tb (id, email, basarisiz_deneme_sayisi, son_basarisiz_deneme, kilitleme_tarihi, kilit_bitis_tarihi, kilitli_mi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5162 (class 0 OID 47700)
+-- Dependencies: 224
+-- Data for Name: ilan_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.ilan_tb (id, olusturan_id, is_takim_ilani, ilgili_takim_id, eksik_kisi_sayisi, aranan_mevki, yas_araligi_min, yas_araligi_max, saha_id, ozel_konum_adi, mac_saati, aciklama, ilan_tarihi, aktif_mi, ilan_tipi, rekabet_seviyesi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5159 (class 0 OID 47644)
+-- Dependencies: 221
+-- Data for Name: isletme_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.isletme_tb (id, isletme_adi, yetkili_ad_soyad, email, sifre, telefon, vergi_no, adres, onayli_mi, kayit_tarihi, konum_enlem, konum_boylam, son_giris_tarihi, email_dogrulanmis, hesap_durumu) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5163 (class 0 OID 47728)
+-- Dependencies: 225
+-- Data for Name: kullanici_istatistik_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.kullanici_istatistik_tb (kullanici_id, toplam_mac_sayisi, gol_sayisi, asist_sayisi, macin_adami_odulu, disiplin_puani, kazanma_orani, son_mac_tarihi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5165 (class 0 OID 47762)
+-- Dependencies: 227
+-- Data for Name: kullanici_musaitlik_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.kullanici_musaitlik_tb (id, kullanici_id, tercih_edilen_bolge, haftanin_gunu, baslangic_saati, bitis_saati, her_saat_uygun, aktif_mi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5158 (class 0 OID 47628)
+-- Dependencies: 220
+-- Data for Name: kullanici_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.kullanici_tb (id, ad_soyad, email, sifre, telefon, profil_foto_url, kayit_tarihi, aktif_mi, dogum_tarihi, "puan_ortalaması", yorum_sayisi, son_enlem, son_boylam, son_giris_tarihi, email_dogrulanmis, hesap_durumu) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5167 (class 0 OID 47800)
+-- Dependencies: 229
+-- Data for Name: refresh_token_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.refresh_token_tb (id, kullanici_id, isletme_id, kullanici_tipi, token_hash, cihaz_bilgisi, ip_adresi, son_kullanim_tarihi, olusturulma_tarihi, gecerlilik_tarihi, iptal_edildi_mi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5169 (class 0 OID 47837)
+-- Dependencies: 231
+-- Data for Name: sifre_sifirlama_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.sifre_sifirlama_tb (id, kullanici_id, isletme_id, kullanici_tipi, token_hash, gecerlilik_tarihi, kullanildi_mi, olusturulma_tarihi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5164 (class 0 OID 47745)
+-- Dependencies: 226
+-- Data for Name: takim_istatistik_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.takim_istatistik_tb (takim_id, toplam_mac_sayisi, galibiyet_sayisi, beraberlik_sayisi, maglubiyet_sayisi, son_mac_tarihi, ortalama_aktiflik_puani, uygulamaya_son_giris_tarihi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5160 (class 0 OID 47665)
+-- Dependencies: 222
+-- Data for Name: takim_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.takim_tb (id, takim_adi, kurucu_id, logo_url, kurulus_tarihi, puan_ortalamasi, oyuncu_ariyor_mu) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5161 (class 0 OID 47682)
+-- Dependencies: 223
+-- Data for Name: takim_uyeleri_tb; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.takim_uyeleri_tb (takim_id, kullanici_id, katilma_tarihi) FROM stdin;
+\.
+
+
+--
+-- TOC entry 4987 (class 2606 OID 47789)
+-- Name: bildirim_tb bildirim_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bildirim_tb
+    ADD CONSTRAINT bildirim_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4991 (class 2606 OID 47836)
+-- Name: giris_gecmisi_tb giris_gecmisi_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.giris_gecmisi_tb
+    ADD CONSTRAINT giris_gecmisi_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4995 (class 2606 OID 47870)
+-- Name: hesap_kilitleme_tb hesap_kilitleme_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.hesap_kilitleme_tb
+    ADD CONSTRAINT hesap_kilitleme_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4979 (class 2606 OID 47712)
+-- Name: ilan_tb ilan_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.ilan_tb
+    ADD CONSTRAINT ilan_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4971 (class 2606 OID 47661)
+-- Name: isletme_tb isletme_tb_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.isletme_tb
+    ADD CONSTRAINT isletme_tb_email_key UNIQUE (email);
+
+
+--
+-- TOC entry 4973 (class 2606 OID 47659)
+-- Name: isletme_tb isletme_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.isletme_tb
+    ADD CONSTRAINT isletme_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4981 (class 2606 OID 47739)
+-- Name: kullanici_istatistik_tb kullanici_istatistik_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kullanici_istatistik_tb
+    ADD CONSTRAINT kullanici_istatistik_tb_pkey PRIMARY KEY (kullanici_id);
+
+
+--
+-- TOC entry 4985 (class 2606 OID 47770)
+-- Name: kullanici_musaitlik_tb kullanici_musaitlik_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kullanici_musaitlik_tb
+    ADD CONSTRAINT kullanici_musaitlik_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4967 (class 2606 OID 47643)
+-- Name: kullanici_tb kullanici_tb_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kullanici_tb
+    ADD CONSTRAINT kullanici_tb_email_key UNIQUE (email);
+
+
+--
+-- TOC entry 4969 (class 2606 OID 47641)
+-- Name: kullanici_tb kullanici_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kullanici_tb
+    ADD CONSTRAINT kullanici_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4989 (class 2606 OID 47814)
+-- Name: refresh_token_tb refresh_token_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refresh_token_tb
+    ADD CONSTRAINT refresh_token_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4993 (class 2606 OID 47850)
+-- Name: sifre_sifirlama_tb sifre_sifirlama_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.sifre_sifirlama_tb
+    ADD CONSTRAINT sifre_sifirlama_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4983 (class 2606 OID 47756)
+-- Name: takim_istatistik_tb takim_istatistik_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.takim_istatistik_tb
+    ADD CONSTRAINT takim_istatistik_tb_pkey PRIMARY KEY (takim_id);
+
+
+--
+-- TOC entry 4975 (class 2606 OID 47676)
+-- Name: takim_tb takim_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.takim_tb
+    ADD CONSTRAINT takim_tb_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4977 (class 2606 OID 47689)
+-- Name: takim_uyeleri_tb takim_uyeleri_tb_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.takim_uyeleri_tb
+    ADD CONSTRAINT takim_uyeleri_tb_pkey PRIMARY KEY (takim_id, kullanici_id);
+
+
+--
+-- TOC entry 5005 (class 2606 OID 47790)
+-- Name: bildirim_tb bildirim_tb_alici_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bildirim_tb
+    ADD CONSTRAINT bildirim_tb_alici_id_fkey FOREIGN KEY (alici_id) REFERENCES public.kullanici_tb(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5006 (class 2606 OID 47795)
+-- Name: bildirim_tb bildirim_tb_ilgili_ilan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.bildirim_tb
+    ADD CONSTRAINT bildirim_tb_ilgili_ilan_id_fkey FOREIGN KEY (ilgili_ilan_id) REFERENCES public.ilan_tb(id);
+
+
+--
+-- TOC entry 5007 (class 2606 OID 47820)
+-- Name: refresh_token_tb fk_refresh_isletme; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refresh_token_tb
+    ADD CONSTRAINT fk_refresh_isletme FOREIGN KEY (isletme_id) REFERENCES public.isletme_tb(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5008 (class 2606 OID 47815)
+-- Name: refresh_token_tb fk_refresh_kullanici; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.refresh_token_tb
+    ADD CONSTRAINT fk_refresh_kullanici FOREIGN KEY (kullanici_id) REFERENCES public.kullanici_tb(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5009 (class 2606 OID 47856)
+-- Name: sifre_sifirlama_tb fk_sifre_isletme; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.sifre_sifirlama_tb
+    ADD CONSTRAINT fk_sifre_isletme FOREIGN KEY (isletme_id) REFERENCES public.isletme_tb(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5010 (class 2606 OID 47851)
+-- Name: sifre_sifirlama_tb fk_sifre_kullanici; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.sifre_sifirlama_tb
+    ADD CONSTRAINT fk_sifre_kullanici FOREIGN KEY (kullanici_id) REFERENCES public.kullanici_tb(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4999 (class 2606 OID 47718)
+-- Name: ilan_tb ilan_tb_ilgili_takim_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.ilan_tb
+    ADD CONSTRAINT ilan_tb_ilgili_takim_id_fkey FOREIGN KEY (ilgili_takim_id) REFERENCES public.takim_tb(id);
+
+
+--
+-- TOC entry 5000 (class 2606 OID 47713)
+-- Name: ilan_tb ilan_tb_olusturan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.ilan_tb
+    ADD CONSTRAINT ilan_tb_olusturan_id_fkey FOREIGN KEY (olusturan_id) REFERENCES public.kullanici_tb(id);
+
+
+--
+-- TOC entry 5001 (class 2606 OID 47723)
+-- Name: ilan_tb ilan_tb_saha_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.ilan_tb
+    ADD CONSTRAINT ilan_tb_saha_id_fkey FOREIGN KEY (saha_id) REFERENCES public.isletme_tb(id);
+
+
+--
+-- TOC entry 5002 (class 2606 OID 47740)
+-- Name: kullanici_istatistik_tb kullanici_istatistik_tb_kullanici_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kullanici_istatistik_tb
+    ADD CONSTRAINT kullanici_istatistik_tb_kullanici_id_fkey FOREIGN KEY (kullanici_id) REFERENCES public.kullanici_tb(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5004 (class 2606 OID 47771)
+-- Name: kullanici_musaitlik_tb kullanici_musaitlik_tb_kullanici_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kullanici_musaitlik_tb
+    ADD CONSTRAINT kullanici_musaitlik_tb_kullanici_id_fkey FOREIGN KEY (kullanici_id) REFERENCES public.kullanici_tb(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5003 (class 2606 OID 47757)
+-- Name: takim_istatistik_tb takim_istatistik_tb_takim_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.takim_istatistik_tb
+    ADD CONSTRAINT takim_istatistik_tb_takim_id_fkey FOREIGN KEY (takim_id) REFERENCES public.takim_tb(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4996 (class 2606 OID 47677)
+-- Name: takim_tb takim_tb_kurucu_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.takim_tb
+    ADD CONSTRAINT takim_tb_kurucu_id_fkey FOREIGN KEY (kurucu_id) REFERENCES public.kullanici_tb(id);
+
+
+--
+-- TOC entry 4997 (class 2606 OID 47695)
+-- Name: takim_uyeleri_tb takim_uyeleri_tb_kullanici_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.takim_uyeleri_tb
+    ADD CONSTRAINT takim_uyeleri_tb_kullanici_id_fkey FOREIGN KEY (kullanici_id) REFERENCES public.kullanici_tb(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 4998 (class 2606 OID 47690)
+-- Name: takim_uyeleri_tb takim_uyeleri_tb_takim_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.takim_uyeleri_tb
+    ADD CONSTRAINT takim_uyeleri_tb_takim_id_fkey FOREIGN KEY (takim_id) REFERENCES public.takim_tb(id) ON DELETE CASCADE;
+
+
+-- Completed on 2026-04-14 20:35:10
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict XgTOYqqueleg6KRklRrjXoefQMwXtp8rXNzfnYUqYLMNkiuCybP5CSffdXrA4rR
+

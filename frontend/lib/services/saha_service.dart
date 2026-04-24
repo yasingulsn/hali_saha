@@ -1,0 +1,80 @@
+import 'package:dio/dio.dart';
+import '../models/saha.dart';
+import '../models/token_response.dart';
+import '../utils/constants.dart';
+import 'api_client.dart';
+
+class SahaService {
+  final ApiClient _apiClient;
+
+  SahaService(this._apiClient);
+
+  Future<ApiResponse<List<Saha>>> tumSahalar() async {
+    try {
+      final response = await _apiClient.dio.get(ApiConstants.sahalar);
+      return _parseListResponse(response);
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<Saha>> sahaDetay(String sahaId) async {
+    try {
+      final response = await _apiClient.dio.get('${ApiConstants.sahalar}/$sahaId');
+      final data = response.data;
+      return ApiResponse(
+        basarili: data['basarili'] ?? false,
+        mesaj: data['mesaj'] ?? '',
+        veri: data['veri'] != null ? Saha.fromJson(data['veri']) : null,
+      );
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<List<Saha>>> sahalarAra(String query) async {
+    try {
+      final response = await _apiClient.dio.get(
+        ApiConstants.sahalarAra,
+        queryParameters: {'q': query},
+      );
+      return _parseListResponse(response);
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<Saha>> sahaEkle(Map<String, dynamic> data) async {
+    try {
+      final response = await _apiClient.dio.post(ApiConstants.sahalar, data: data);
+      final respData = response.data;
+      return ApiResponse(
+        basarili: respData['basarili'] ?? false,
+        mesaj: respData['mesaj'] ?? '',
+        veri: respData['veri'] != null ? Saha.fromJson(respData['veri']) : null,
+      );
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  ApiResponse<List<Saha>> _parseListResponse(Response response) {
+    final data = response.data;
+    final List<Saha> sahalar = data['veri'] != null
+        ? (data['veri'] as List).map((e) => Saha.fromJson(e)).toList()
+        : [];
+    return ApiResponse(
+      basarili: data['basarili'] ?? false,
+      mesaj: data['mesaj'] ?? '',
+      veri: sahalar,
+    );
+  }
+
+  ApiResponse<T> _handleError<T>(DioException e) {
+    String mesaj = 'Bağlantı hatası';
+    if (e.response?.data != null && e.response?.data is Map) {
+      mesaj = e.response?.data['mesaj'] ?? mesaj;
+    }
+    return ApiResponse(basarili: false, mesaj: mesaj);
+  }
+}

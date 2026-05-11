@@ -20,17 +20,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final _tabs = const [
     KesfetTab(),
-    SahalarTab(),
-    IlanlarimTab(),
     MaclarTab(),
+    IlanlarimTab(),
+    SahalarTab(),
     ProfilTab(),
   ];
 
   final _navItems = const [
     _NavItem(Icons.explore_outlined, Icons.explore_rounded, 'Keşfet'),
-    _NavItem(Icons.stadium_outlined, Icons.stadium_rounded, 'Sahalar'),
-    _NavItem(Icons.campaign_outlined, Icons.campaign_rounded, 'İlanlarım'),
     _NavItem(Icons.sports_soccer_outlined, Icons.sports_soccer_rounded, 'Maçlar'),
+    _NavItem(Icons.campaign_outlined, Icons.campaign_rounded, 'İlanlar'),
+    _NavItem(Icons.stadium_outlined, Icons.stadium_rounded, 'Sahalar'),
     _NavItem(Icons.person_outline_rounded, Icons.person_rounded, 'Profil'),
   ];
 

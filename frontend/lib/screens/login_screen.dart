@@ -238,8 +238,8 @@ class _LoginScreenState extends State<LoginScreen>
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.primaryGreen
-                      .withOpacity(0.2 * _pulseAnim.value),
+                  color:
+                      AppTheme.primaryGreen.withOpacity(0.2 * _pulseAnim.value),
                   blurRadius: 30,
                   spreadRadius: 2,
                 ),
@@ -604,27 +604,43 @@ class _LoginScreenState extends State<LoginScreen>
                 gradient: _beniHatirla ? AppTheme.buttonGradient : null,
                 color: _beniHatirla ? null : AppTheme.backgroundDark,
                 border: Border.all(
-                  color: _beniHatirla ? Colors.transparent : AppTheme.textSecondary.withOpacity(0.3),
+                  color: _beniHatirla
+                      ? Colors.transparent
+                      : AppTheme.textSecondary.withOpacity(0.3),
                   width: 1.5,
                 ),
-                boxShadow: _beniHatirla ? [BoxShadow(color: AppTheme.primaryGreen.withOpacity(0.3), blurRadius: 8)] : null,
+                boxShadow: _beniHatirla
+                    ? [
+                        BoxShadow(
+                            color: AppTheme.primaryGreen.withOpacity(0.3),
+                            blurRadius: 8)
+                      ]
+                    : null,
               ),
               child: AnimatedAlign(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic,
-                alignment: _beniHatirla ? Alignment.centerRight : Alignment.centerLeft,
+                alignment:
+                    _beniHatirla ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
-                  width: 18, height: 18,
+                  width: 18,
+                  height: 18,
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _beniHatirla ? AppTheme.backgroundDark : AppTheme.textSecondary.withOpacity(0.5),
+                    color: _beniHatirla
+                        ? AppTheme.backgroundDark
+                        : AppTheme.textSecondary.withOpacity(0.5),
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 12),
-            const Text('Beni Hatırla', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w500)),
+            const Text('Beni Hatırla',
+                style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -637,7 +653,8 @@ class _LoginScreenState extends State<LoginScreen>
       child: TextButton(
         onPressed: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => ForgotPasswordScreen(isKullanici: _isKullanici)),
+          MaterialPageRoute(
+              builder: (_) => ForgotPasswordScreen(isKullanici: _isKullanici)),
         ),
         style: TextButton.styleFrom(
           padding: EdgeInsets.zero,
@@ -646,7 +663,10 @@ class _LoginScreenState extends State<LoginScreen>
         ),
         child: Text(
           'Şifremi Unuttum?',
-          style: TextStyle(color: AppTheme.primaryGreen.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.w600),
+          style: TextStyle(
+              color: AppTheme.primaryGreen.withOpacity(0.8),
+              fontSize: 12,
+              fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -871,8 +891,7 @@ class _FieldLinesPainter extends CustomPainter {
     );
     // Top-right
     canvas.drawArc(
-      Rect.fromCircle(
-          center: Offset(size.width, 0), radius: cornerRadius),
+      Rect.fromCircle(center: Offset(size.width, 0), radius: cornerRadius),
       math.pi / 2,
       math.pi / 2,
       false,

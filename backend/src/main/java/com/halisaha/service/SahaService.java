@@ -91,6 +91,11 @@ public class SahaService {
         return sahalar.stream().map(this::toResponse).collect(Collectors.toList());
     }
 
+    public List<SahaResponse> sahalarKonumaGore(String il, String ilce) {
+        List<HaliSaha> sahalar = HaliSaha.findByKonum(il, ilce);
+        return sahalar.stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
     private SahaResponse toResponse(HaliSaha saha) {
         Isletme isletme = saha.isletme != null ? saha.isletme : Isletme.findById(saha.isletmeId);
         String isletmeAdi = isletme != null ? isletme.isletmeAdi : "Bilinmeyen";

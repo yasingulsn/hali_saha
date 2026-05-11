@@ -32,12 +32,38 @@ class KullaniciBilgi {
   final String adSoyad;
   final String email;
   final String? profilFotoUrl;
+  final String? telefon;
+  final String? tercihEdilenPozisyon;
+  final double? disiplinPuani;
+  final double? puanOrtalamasi;
+  final int? yorumSayisi;
+  final String? dogumTarihi;
+  final String? kayitTarihi;
+  final String? hesapDurumu;
+  final String? il;
+  final String? ilce;
+  final int toplamMacSayisi;
+  final int olusturduguMacSayisi;
+  final int toplamIlanSayisi;
 
   KullaniciBilgi({
     required this.id,
     required this.adSoyad,
     required this.email,
     this.profilFotoUrl,
+    this.telefon,
+    this.tercihEdilenPozisyon,
+    this.disiplinPuani,
+    this.puanOrtalamasi,
+    this.yorumSayisi,
+    this.dogumTarihi,
+    this.kayitTarihi,
+    this.hesapDurumu,
+    this.il,
+    this.ilce,
+    this.toplamMacSayisi = 0,
+    this.olusturduguMacSayisi = 0,
+    this.toplamIlanSayisi = 0,
   });
 
   factory KullaniciBilgi.fromJson(Map<String, dynamic> json) {
@@ -46,6 +72,23 @@ class KullaniciBilgi {
       adSoyad: json['adSoyad'] ?? '',
       email: json['email'] ?? '',
       profilFotoUrl: json['profilFotoUrl'],
+      telefon: json['telefon'],
+      tercihEdilenPozisyon: json['tercihEdilenPozisyon'],
+      disiplinPuani: json['disiplinPuani'] != null
+          ? (json['disiplinPuani'] as num).toDouble()
+          : null,
+      puanOrtalamasi: json['puanOrtalamasi'] != null
+          ? (json['puanOrtalamasi'] as num).toDouble()
+          : null,
+      yorumSayisi: json['yorumSayisi'],
+      dogumTarihi: json['dogumTarihi'],
+      kayitTarihi: json['kayitTarihi'],
+      hesapDurumu: json['hesapDurumu'],
+      il: json['il'],
+      ilce: json['ilce'],
+      toplamMacSayisi: json['toplamMacSayisi'] ?? 0,
+      olusturduguMacSayisi: json['olusturduguMacSayisi'] ?? 0,
+      toplamIlanSayisi: json['toplamIlanSayisi'] ?? 0,
     );
   }
 
@@ -55,6 +98,19 @@ class KullaniciBilgi {
       'adSoyad': adSoyad,
       'email': email,
       'profilFotoUrl': profilFotoUrl,
+      'telefon': telefon,
+      'tercihEdilenPozisyon': tercihEdilenPozisyon,
+      'disiplinPuani': disiplinPuani,
+      'puanOrtalamasi': puanOrtalamasi,
+      'yorumSayisi': yorumSayisi,
+      'dogumTarihi': dogumTarihi,
+      'kayitTarihi': kayitTarihi,
+      'hesapDurumu': hesapDurumu,
+      'il': il,
+      'ilce': ilce,
+      'toplamMacSayisi': toplamMacSayisi,
+      'olusturduguMacSayisi': olusturduguMacSayisi,
+      'toplamIlanSayisi': toplamIlanSayisi,
     };
   }
 }

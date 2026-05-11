@@ -10,6 +10,10 @@ class ApiConstants {
   static const String cikis = '/api/auth/cikis';
   static const String tumCihazlardanCikis = '/api/auth/tum-cihazlardan-cikis';
   static const String profil = '/api/auth/profil';
+  static const String profilGuncelle = '/api/auth/profil';
+  static const String konumGuncelle = '/api/auth/profil/konum';
+  static const String sifreSifirlamaIstegi = '/api/auth/sifre-sifirlama-istegi';
+  static const String sifreSifirla = '/api/auth/sifre-sifirla';
 
   // Saha endpoints
   static const String sahalar = '/api/sahalar';
@@ -22,6 +26,13 @@ class ApiConstants {
 
   // Arama endpoint
   static const String birlesikArama = '/api/arama';
+
+  // Bildirim endpoints
+  static const String bildirimler = '/api/bildirimler';
+  static const String bildirimOkunmamisSayisi = '/api/bildirimler/okunmamis-sayisi';
+  static const String bildirimHepsiniOku = '/api/bildirimler/hepsini-oku';
+  static String bildirimOku(String id) => '/api/bildirimler/$id/oku';
+  static String bildirimSil(String id) => '/api/bildirimler/$id';
 }
 
 class StorageKeys {
@@ -30,4 +41,5 @@ class StorageKeys {
   static const String kullaniciTipi = 'kullanici_tipi';
   static const String kullaniciBilgi = 'kullanici_bilgi';
   static const String beniHatirla = 'beni_hatirla';
+  static const String seciliKonum = 'secili_konum'; // il|ilce formatında
 }

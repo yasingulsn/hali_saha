@@ -66,6 +66,17 @@ class _TakimIlaniOlusturScreenState extends State<TakimIlaniOlusturScreen> {
 
   Future<void> _olustur() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (_konumController.text.isEmpty || !_konumController.text.contains('/')) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Lütfen il ve ilçe bilgisini seçin'),
+        backgroundColor: AppTheme.errorRed,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ));
+      return;
+    }
+
     setState(() => _gonderiliyor = true);
 
     final data = {

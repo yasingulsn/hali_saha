@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/token_response.dart';
 import '../services/auth_service.dart';
+import '../services/profil_service.dart';
 
 enum AuthState { initial, loading, authenticated, unauthenticated, error }
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final ProfilService _profilService = ProfilService();
 
   AuthState _state = AuthState.initial;
   String? _errorMessage;
@@ -17,6 +19,7 @@ class AuthProvider extends ChangeNotifier {
   KullaniciBilgi? get currentUser => _currentUser;
   String? get kullaniciTipi => _kullaniciTipi;
   bool get isAuthenticated => _state == AuthState.authenticated;
+  String? get currentUserId => _currentUser?.id;
 
   // ─── BAŞLANGIÇ KONTROLÜ ───────────────────────────────────────
 
@@ -26,13 +29,27 @@ class AuthProvider extends ChangeNotifier {
 
     final loggedIn = await _authService.isLoggedIn();
     if (loggedIn) {
-      _currentUser = await _authService.getCurrentUser();
       _kullaniciTipi = await _authService.getKullaniciTipi();
+      // Önce local'den yükle (hızlı açılış için)
+      _currentUser = await _authService.getCurrentUser();
       _state = AuthState.authenticated;
+      notifyListeners();
+
+      // Sonra arkada güncel bilgiyi çek (eğer kullanıcı ise)
+      if (_kullaniciTipi == 'KULLANICI') {
+        try {
+          final res = await _profilService.getProfilDetay();
+          if (res.basarili && res.veri != null) {
+            _currentUser = res.veri;
+            await _authService.saveKullaniciBilgi(_currentUser!);
+            notifyListeners();
+          }
+        } catch (_) {}
+      }
     } else {
       _state = AuthState.unauthenticated;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   // ─── KULLANICI GİRİŞ ─────────────────────────────────────────
@@ -172,6 +189,12 @@ class AuthProvider extends ChangeNotifier {
     _currentUser = null;
     _kullaniciTipi = null;
     _state = AuthState.unauthenticated;
+    notifyListeners();
+  }
+
+  Future<void> updateCurrentUser(KullaniciBilgi bilgi) async {
+    _currentUser = bilgi;
+    await _authService.saveKullaniciBilgi(bilgi);
     notifyListeners();
   }
 

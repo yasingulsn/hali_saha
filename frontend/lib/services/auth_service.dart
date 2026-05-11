@@ -176,6 +176,38 @@ class AuthService {
     }
   }
 
+  // ─── ŞİFRE SIFIRLAMA ────────────────────────────────────────
+
+  Future<ApiResponse<void>> sifreSifirlamaIstegi(String email, String kullaniciTipi) async {
+    try {
+      final response = await _apiClient.dio.post(
+        ApiConstants.sifreSifirlamaIstegi,
+        data: {'email': email, 'kullaniciTipi': kullaniciTipi},
+      );
+      return ApiResponse(
+        basarili: response.data['basarili'] ?? false,
+        mesaj: response.data['mesaj'] ?? '',
+      );
+    } on DioException catch (e) {
+      return ApiResponse(basarili: false, mesaj: _handleDioError(e).mesaj);
+    }
+  }
+
+  Future<ApiResponse<void>> sifreSifirla(String token, String yeniSifre) async {
+    try {
+      final response = await _apiClient.dio.post(
+        ApiConstants.sifreSifirla,
+        data: {'token': token, 'yeniSifre': yeniSifre},
+      );
+      return ApiResponse(
+        basarili: response.data['basarili'] ?? false,
+        mesaj: response.data['mesaj'] ?? '',
+      );
+    } on DioException catch (e) {
+      return ApiResponse(basarili: false, mesaj: _handleDioError(e).mesaj);
+    }
+  }
+
   // ─── OTURUM KONTROLÜ ─────────────────────────────────────────
 
   Future<bool> isLoggedIn() async {
@@ -188,6 +220,10 @@ class AuthService {
 
   Future<String?> getKullaniciTipi() async {
     return await _storage.getKullaniciTipi();
+  }
+
+  Future<void> saveKullaniciBilgi(KullaniciBilgi bilgi) async {
+    await _storage.saveKullaniciBilgi(bilgi);
   }
 
   // ─── HATA YÖNETİMİ ───────────────────────────────────────────

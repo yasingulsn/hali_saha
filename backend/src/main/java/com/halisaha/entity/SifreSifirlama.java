@@ -23,8 +23,8 @@ public class SifreSifirlama extends PanacheEntityBase {
     @Column(name = "kullanici_tipi", nullable = false, length = 20)
     public String kullaniciTipi;
 
-    @Column(name = "token_hash", nullable = false)
-    public String tokenHash;
+    @Column(name = "token", nullable = false)
+    public String token;
 
     @Column(name = "gecerlilik_tarihi", nullable = false)
     public OffsetDateTime gecerlilikTarihi;

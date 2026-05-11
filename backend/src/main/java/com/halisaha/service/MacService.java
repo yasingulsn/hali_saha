@@ -17,6 +17,9 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class MacService {
 
+    @jakarta.inject.Inject
+    BildirimService bildirimService;
+
     // ─── MAC LİSTELEME ──────────────────────────────────────────
 
     public List<MacResponse> acikMaclar() {
@@ -38,7 +41,7 @@ public class MacService {
 
         for (MacKatilimci k : katilimlar) {
             Mac mac = k.mac != null ? k.mac : Mac.findById(k.macId);
-            if (mac != null) {
+            if (mac != null && !mac.macTarihi.isBefore(java.time.LocalDate.now())) {
                 sonuc.add(toResponse(mac));
             }
         }
@@ -149,6 +152,19 @@ public class MacService {
         mac.olusturulmaTarihi = OffsetDateTime.now(ZoneOffset.UTC);
         mac.persist();
 
+        // Yakındaki kullanıcılara bildirim gönder
+        if (mac.il != null) {
+            bildirimService.yakinIlanBildirimiGonder(
+                mac.il, 
+                mac.ilce, 
+                "Yakınında Yeni Maç!", 
+                mac.ilce + " bölgesinde yeni bir maç oluşturuldu: " + mac.macBasligi,
+                mac.id.toString(),
+                kullaniciId,
+                "YAKIN_MAC"
+            );
+        }
+
         // Oluşturanı otomatik katılımcı yap
         MacKatilimci katilimci = new MacKatilimci();
         katilimci.macId = mac.id;
@@ -209,6 +225,16 @@ public class MacService {
         }
         mac.persist();
 
+        // Maç sahibine bildirim gönder
+        Kullanici katilan = Kullanici.findById(kullaniciId);
+        bildirimService.bildirimOlustur(
+            mac.olusturanId,
+            "Maçına Yeni Katılım",
+            (katilan != null ? katilan.adSoyad : "Bir oyuncu") + " '" + mac.macBasligi + "' maçına katıldı.",
+            "MAC_KATILIM",
+            mac.id.toString()
+        );
+
         return toResponseWithKatilimcilar(mac);
     }
 
@@ -244,6 +270,11 @@ public class MacService {
 
     public List<MacResponse> maclarAra(String query) {
         List<Mac> maclar = Mac.ara(query);
+        return maclar.stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    public List<MacResponse> maclarKonumaGore(String il, String ilce) {
+        List<Mac> maclar = Mac.findByKonum(il, ilce);
         return maclar.stream().map(this::toResponse).collect(Collectors.toList());
     }
 

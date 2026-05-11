@@ -4,11 +4,14 @@ import '../utils/constants.dart';
 import 'secure_storage_service.dart';
 
 class ApiClient {
+  static final ApiClient _instance = ApiClient._internal();
+  factory ApiClient() => _instance;
+
   late final Dio _dio;
   final SecureStorageService _storage = SecureStorageService();
   bool _isRefreshing = false;
 
-  ApiClient() {
+  ApiClient._internal() {
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConstants.baseUrl,

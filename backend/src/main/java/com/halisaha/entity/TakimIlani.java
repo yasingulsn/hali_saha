@@ -88,4 +88,17 @@ public class TakimIlani extends PanacheEntityBase {
                         ") ORDER BY olusturulmaTarihi DESC",
                 like);
     }
+
+    public static List<TakimIlani> findByKonum(String il, String ilce) {
+        if (ilce != null && !ilce.isEmpty()) {
+            return list(
+                    "ilanDurumu = 'AKTIF' AND (" +
+                            "LOWER(COALESCE(konum, '')) LIKE ?1 OR LOWER(COALESCE(konum, '')) LIKE ?2" +
+                            ") ORDER BY olusturulmaTarihi DESC",
+                    "%" + il.toLowerCase() + "%", "%" + ilce.toLowerCase() + "%");
+        }
+        return list(
+                "ilanDurumu = 'AKTIF' AND LOWER(COALESCE(konum, '')) LIKE ?1 ORDER BY olusturulmaTarihi DESC",
+                "%" + il.toLowerCase() + "%");
+    }
 }

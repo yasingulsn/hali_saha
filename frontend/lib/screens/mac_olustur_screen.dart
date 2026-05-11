@@ -110,6 +110,17 @@ class _MacOlusturScreenState extends State<MacOlusturScreen> {
 
   Future<void> _macOlustur() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (_ilController.text.isEmpty || _ilceController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Lütfen il ve ilçe bilgisini seçin'),
+        backgroundColor: AppTheme.errorRed,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ));
+      return;
+    }
+
     setState(() => _gonderiliyor = true);
 
     final data = {

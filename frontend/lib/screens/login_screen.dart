@@ -8,6 +8,7 @@ import '../utils/validators.dart';
 import '../utils/theme.dart';
 import 'register_screen.dart';
 import 'home_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -336,6 +337,7 @@ class _LoginScreenState extends State<LoginScreen>
                 _buildFormSection(),
                 const SizedBox(height: 18),
                 _buildBeniHatirla(),
+                _buildSifremiUnuttum(),
                 const SizedBox(height: 6),
                 _buildErrorMessage(),
                 const SizedBox(height: 22),
@@ -592,7 +594,6 @@ class _LoginScreenState extends State<LoginScreen>
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
-            // Custom animated toggle
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeOutCubic,
@@ -603,99 +604,49 @@ class _LoginScreenState extends State<LoginScreen>
                 gradient: _beniHatirla ? AppTheme.buttonGradient : null,
                 color: _beniHatirla ? null : AppTheme.backgroundDark,
                 border: Border.all(
-                  color: _beniHatirla
-                      ? Colors.transparent
-                      : AppTheme.textSecondary.withOpacity(0.3),
+                  color: _beniHatirla ? Colors.transparent : AppTheme.textSecondary.withOpacity(0.3),
                   width: 1.5,
                 ),
-                boxShadow: _beniHatirla
-                    ? [
-                        BoxShadow(
-                          color: AppTheme.primaryGreen.withOpacity(0.3),
-                          blurRadius: 8,
-                        ),
-                      ]
-                    : null,
+                boxShadow: _beniHatirla ? [BoxShadow(color: AppTheme.primaryGreen.withOpacity(0.3), blurRadius: 8)] : null,
               ),
               child: AnimatedAlign(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic,
-                alignment:
-                    _beniHatirla ? Alignment.centerRight : Alignment.centerLeft,
+                alignment: _beniHatirla ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
-                  width: 18,
-                  height: 18,
+                  width: 18, height: 18,
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _beniHatirla
-                        ? AppTheme.backgroundDark
-                        : AppTheme.textSecondary.withOpacity(0.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
+                    color: _beniHatirla ? AppTheme.backgroundDark : AppTheme.textSecondary.withOpacity(0.5),
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 12),
-            const Text(
-              'Beni Hatırla',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const Spacer(),
-            AnimatedOpacity(
-              opacity: _beniHatirla ? 1.0 : 0.4,
-              duration: const Duration(milliseconds: 250),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _beniHatirla
-                      ? AppTheme.primaryGreen.withOpacity(0.12)
-                      : AppTheme.backgroundDark.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: _beniHatirla
-                        ? AppTheme.primaryGreen.withOpacity(0.2)
-                        : Colors.transparent,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.shield_outlined,
-                      size: 12,
-                      color: _beniHatirla
-                          ? AppTheme.neonGreen
-                          : AppTheme.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '90 gün',
-                      style: TextStyle(
-                        color: _beniHatirla
-                            ? AppTheme.neonGreen
-                            : AppTheme.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            const Text('Beni Hatırla', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w500)),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSifremiUnuttum() {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => ForgotPasswordScreen(isKullanici: _isKullanici)),
+        ),
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          'Şifremi Unuttum?',
+          style: TextStyle(color: AppTheme.primaryGreen.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.w600),
         ),
       ),
     );

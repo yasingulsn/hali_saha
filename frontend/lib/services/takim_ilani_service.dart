@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../models/takim_ilani.dart';
+import '../models/takim_ilani_istek.dart';
 import '../models/token_response.dart';
 import 'api_client.dart';
 
@@ -83,10 +84,53 @@ class TakimIlaniService {
     try {
       final response = await _apiClient.dio.delete('$_basePath/$ilanId');
       final data = response.data;
-      return ApiResponse(
-        basarili: data['basarili'] ?? false,
-        mesaj: data['mesaj'] ?? '',
-      );
+      return ApiResponse(basarili: data['basarili'] ?? false, mesaj: data['mesaj'] ?? '');
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<List<TakimIlaniIstek>>> gelenIstekler() async {
+    try {
+      final response = await _apiClient.dio.get('$_basePath/gelen-istekler');
+      final data = response.data;
+      final list = data['veri'] != null
+          ? (data['veri'] as List).map((e) => TakimIlaniIstek.fromJson(e)).toList()
+          : <TakimIlaniIstek>[];
+      return ApiResponse(basarili: data['basarili'] ?? false, mesaj: data['mesaj'] ?? '', veri: list);
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<void>> istekOnayla(String id) async {
+    try {
+      final response = await _apiClient.dio.post('$_basePath/istek/$id/onayla');
+      final data = response.data;
+      return ApiResponse(basarili: data['basarili'] ?? false, mesaj: data['mesaj'] ?? '');
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<void>> istekReddet(String id) async {
+    try {
+      final response = await _apiClient.dio.post('$_basePath/istek/$id/reddet');
+      final data = response.data;
+      return ApiResponse(basarili: data['basarili'] ?? false, mesaj: data['mesaj'] ?? '');
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<void>> katilmaIstegiGonder(String ilanId, String mesaj) async {
+    try {
+      final response = await _apiClient.dio.post('$_basePath/istek', data: {
+        'ilanId': ilanId,
+        'mesaj': mesaj,
+      });
+      final data = response.data;
+      return ApiResponse(basarili: data['basarili'] ?? false, mesaj: data['mesaj'] ?? '');
     } on DioException catch (e) {
       return _handleError(e);
     }

@@ -73,4 +73,13 @@ public class HaliSaha extends PanacheEntityBase {
         return list("aktifMi = true AND (LOWER(sahaAdi) LIKE ?1 OR LOWER(adres) LIKE ?1)",
                 "%" + query.toLowerCase() + "%");
     }
+
+    public static List<HaliSaha> findByKonum(String il, String ilce) {
+        if (ilce != null && !ilce.isEmpty()) {
+            return list("aktifMi = true AND (LOWER(adres) LIKE ?1 AND LOWER(adres) LIKE ?2)",
+                    "%" + il.toLowerCase() + "%", "%" + ilce.toLowerCase() + "%");
+        }
+        return list("aktifMi = true AND LOWER(adres) LIKE ?1",
+                "%" + il.toLowerCase() + "%");
+    }
 }

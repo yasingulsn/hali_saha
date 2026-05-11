@@ -4,11 +4,11 @@ import '../../models/mac.dart';
 import '../../models/saha.dart';
 import '../../models/takim_ilani.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/konum_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/konum_service.dart';
 import '../../services/mac_service.dart';
 import '../../services/saha_service.dart';
-import '../../services/takim_ilani_service.dart';
 import '../../utils/theme.dart';
 import '../arama_screen.dart';
 import '../mac_detay_screen.dart';
@@ -16,6 +16,9 @@ import '../mac_olustur_screen.dart';
 import '../saha_detay_screen.dart';
 import '../takim_ilanlari_screen.dart';
 import '../takim_ilani_olustur_screen.dart';
+import '../bildirimler_screen.dart';
+import '../../providers/bildirim_provider.dart';
+import '../../services/takim_ilani_service.dart';
 import '../../widgets/konum_secim_sheet.dart';
 
 class KesfetTab extends StatefulWidget {
@@ -33,50 +36,69 @@ class _KesfetTabState extends State<KesfetTab> {
   late final TakimIlaniService _takimIlaniService = TakimIlaniService(_apiClient);
 
   List<Mac> _tumMaclar = [];
+  List<Mac> _digerMaclar = [];
   List<Saha> _populerSahalar = [];
   List<TakimIlani> _takimIlanlari = [];
   bool _yukleniyor = true;
-  KonumSecim? _konumSecim;
-  String? _konumAramaMetni;
-
-  String? _macFormatFiltre;
-  String? _macTipiFiltre;
-
-  final _formatFiltreler = [null, '5v5', '6v6', '7v7', '8v8', '11v11'];
 
   @override
   void initState() {
     super.initState();
     _yukle();
+    Future.microtask(() => context.read<BildirimProvider>().sayiGuncelle());
   }
 
   Future<void> _yukle() async {
     setState(() => _yukleniyor = true);
     final macRes = await _macService.acikMaclar();
     final sahaRes = await _sahaService.tumSahalar();
-    List<TakimIlani> ilanlar = [];
-    try {
-      final ilanRes = await _takimIlaniService.aktifIlanlar();
-      if (ilanRes.basarili && ilanRes.veri != null) ilanlar = ilanRes.veri!;
-    } catch (_) {}
+    final ilanRes = await _takimIlaniService.aktifIlanlar();
+
     if (mounted) {
+      final konumProvider = context.read<KonumProvider>();
+      final il = (konumProvider.seciliIl ?? '').toLowerCase();
+      final ilce = (konumProvider.seciliIlce ?? '').toLowerCase();
+      
       setState(() {
         _yukleniyor = false;
-        if (macRes.basarili && macRes.veri != null) _tumMaclar = _konumaGoreMacFiltrele(macRes.veri!);
-        if (sahaRes.basarili && sahaRes.veri != null) {
-          _populerSahalar = _konumaGoreSahaFiltrele(sahaRes.veri!).take(5).toList();
+        
+        // MAÇLAR
+        if (macRes.basarili && macRes.veri != null) {
+          final hepsi = macRes.veri!;
+          _tumMaclar = hepsi.where((m) {
+            final mIl = (m.il ?? '').toLowerCase();
+            final mIlce = (m.ilce ?? '').toLowerCase();
+            if (il.isEmpty) return true;
+            if (ilce.isEmpty) return mIl.contains(il);
+            return mIl.contains(il) && mIlce.contains(ilce);
+          }).toList();
+          
+          // Konum dışındaki maçları da "diğerleri" için sakla
+          _digerMaclar = hepsi.where((m) => !_tumMaclar.contains(m)).take(10).toList();
         }
-        _takimIlanlari = _konumaGoreIlanFiltrele(ilanlar);
+
+        // SAHALAR
+        if (sahaRes.basarili && sahaRes.veri != null) {
+          final hepsi = sahaRes.veri!;
+          _populerSahalar = hepsi.where((s) {
+            final adres = s.adres.toLowerCase();
+            if (il.isEmpty) return true;
+            return adres.contains(il);
+          }).toList().take(5).toList();
+        }
+
+        // İLANLAR
+        if (ilanRes.basarili && ilanRes.veri != null) {
+          final hepsi = ilanRes.veri!;
+          _takimIlanlari = hepsi.where((i) {
+            final k = (i.konum ?? '').toLowerCase();
+            if (il.isEmpty) return true;
+            if (ilce.isEmpty) return k.contains(il);
+            return k.contains(il) && k.contains(ilce);
+          }).toList();
+        }
       });
     }
-  }
-
-  List<Mac> get _filtrelenmislMaclar {
-    return _tumMaclar.where((m) {
-      if (_macFormatFiltre != null && m.format != _macFormatFiltre) return false;
-      if (_macTipiFiltre != null && m.macTipi != _macTipiFiltre) return false;
-      return true;
-    }).toList();
   }
 
   @override
@@ -92,158 +114,864 @@ class _KesfetTabState extends State<KesfetTab> {
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         slivers: [
-          SliverToBoxAdapter(child: _buildHeader(context, user, isIsletme)),
-          SliverToBoxAdapter(child: _buildKonumBar()),
-          SliverToBoxAdapter(child: _buildSearchBar()),
+          // ── HEADER ──────────────────────────────────
+          SliverToBoxAdapter(child: _buildHeader(user)),
+          // ── KONUM + ARAMA ───────────────────────────
+          SliverToBoxAdapter(child: _buildKonumVeArama()),
+          // ── HIZLI ERİŞİM ────────────────────────────
           SliverToBoxAdapter(child: _buildQuickActions(isIsletme)),
+
           if (_yukleniyor)
-            const SliverToBoxAdapter(
-              child: Padding(padding: EdgeInsets.only(top: 60),
-                child: Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen))),
+            const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)),
             )
           else ...[
-            if (_populerSahalar.isNotEmpty) ...[
-              SliverToBoxAdapter(child: _buildSectionTitle('Sahalar', null)),
-              SliverToBoxAdapter(child: _buildSahalarList()),
+            // ── YAKLAŞAN MAÇLAR ─────────────────────────
+            if (_tumMaclar.isNotEmpty) ...[
+              SliverToBoxAdapter(child: _buildSectionHeader(
+                icon: Icons.sports_soccer_rounded,
+                iconColor: AppTheme.primaryGreen,
+                title: 'Yaklaşan Maçlar',
+                badge: '${_tumMaclar.length}',
+              )),
+              SliverToBoxAdapter(child: _buildMaclarHorizontal()),
             ],
+
+            // ── TAKIM İLANLARI ─────────────────────────
             if (_takimIlanlari.isNotEmpty) ...[
-              SliverToBoxAdapter(child: _buildSectionTitle('Takıma Kalıcı Oyuncu İlanları', () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const TakimIlanlariScreen()));
-              })),
-              SliverToBoxAdapter(child: _buildTakimIlanlariList()),
+              SliverToBoxAdapter(child: _buildSectionHeader(
+                icon: Icons.groups_rounded,
+                iconColor: AppTheme.accentPurple,
+                title: 'Takım İlanları',
+                badge: '${_takimIlanlari.length}',
+                onTumunuGor: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TakimIlanlariScreen())),
+              )),
+              SliverToBoxAdapter(child: _buildTakimIlanlariHorizontal()),
             ],
-            SliverToBoxAdapter(child: _buildMaclarBaslik()),
-            SliverToBoxAdapter(child: _buildMacFiltreler()),
-            if (_filtrelenmislMaclar.isEmpty)
-              SliverToBoxAdapter(
-                child: Padding(padding: const EdgeInsets.all(40),
-                  child: Center(child: Column(children: [
-                    Container(
-                      width: 64, height: 64,
-                      decoration: BoxDecoration(color: AppTheme.cardDark, shape: BoxShape.circle),
-                      child: Icon(Icons.sports_soccer_outlined, size: 32, color: AppTheme.textSecondary.withOpacity(0.2)),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(_tumMaclar.isEmpty ? 'Henüz maç yok' : 'Filtreyle eşleşen maç yok',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppTheme.textSecondary.withOpacity(0.5))),
-                  ]))),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                sliver: SliverList(delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildMacItem(_filtrelenmislMaclar[index]),
-                  childCount: _filtrelenmislMaclar.length,
-                )),
-              ),
+
+            // ── DİĞER YAKLAŞAN MAÇLAR ───────────────────
+            if (_tumMaclar.isEmpty && _digerMaclar.isNotEmpty) ...[
+              SliverToBoxAdapter(child: _buildSectionHeader(
+                icon: Icons.explore_rounded,
+                iconColor: AppTheme.accentCoral,
+                title: 'Diğer Yaklaşan Maçlar',
+              )),
+              SliverToBoxAdapter(child: _buildDigerMaclarHorizontal()),
+            ],
+
+            // ── SAHALAR ─────────────────────────────────
+            if (_populerSahalar.isNotEmpty) ...[
+              SliverToBoxAdapter(child: _buildSectionHeader(
+                icon: Icons.stadium_rounded,
+                iconColor: AppTheme.accentBlue,
+                title: 'Yakındaki Sahalar',
+              )),
+              SliverToBoxAdapter(child: _buildSahalarGrid()),
+            ],
+
+            // ── BOŞ DURUM ───────────────────────────────
+            if (_tumMaclar.isEmpty && _populerSahalar.isEmpty && _takimIlanlari.isEmpty)
+              SliverToBoxAdapter(child: _buildBosEkran()),
           ],
+
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context, dynamic user, bool isIsletme) {
+  // ═══════════════════════════════════════════════════════════════
+  // HEADER
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildHeader(dynamic user) {
     final hour = DateTime.now().hour;
     String greeting;
-    if (hour < 12) { greeting = 'Günaydın'; }
-    else if (hour < 18) { greeting = 'İyi günler'; }
-    else { greeting = 'İyi akşamlar'; }
+    IconData greetIcon;
+    if (hour < 12) {
+      greeting = 'Günaydın';
+      greetIcon = Icons.wb_sunny_rounded;
+    } else if (hour < 18) {
+      greeting = 'İyi günler';
+      greetIcon = Icons.wb_cloudy_rounded;
+    } else {
+      greeting = 'İyi akşamlar';
+      greetIcon = Icons.nights_stay_rounded;
+    }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-      child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('$greeting,', style: TextStyle(fontSize: 14, color: AppTheme.textSecondary.withOpacity(0.7), fontWeight: FontWeight.w500)),
-          const SizedBox(height: 2),
-          Text(user?.adSoyad ?? 'Kullanıcı',
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppTheme.textPrimary, letterSpacing: -0.3)),
-        ])),
-        Container(
-          width: 44, height: 44,
-          decoration: BoxDecoration(color: AppTheme.cardDark, borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withOpacity(0.04))),
-          child: Stack(alignment: Alignment.center, children: [
-            const Icon(Icons.notifications_none_rounded, color: AppTheme.textSecondary, size: 22),
-            Positioned(top: 10, right: 10,
-              child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.accentCoral, shape: BoxShape.circle))),
-          ]),
-        ),
-      ]),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-      child: GestureDetector(
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AramaScreen())),
-        child: Container(
-          height: 50,
-          decoration: BoxDecoration(
-            color: AppTheme.cardDark, borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.04)),
-          ),
-          child: Row(children: [
-            const SizedBox(width: 16),
-            Icon(Icons.search_rounded, color: AppTheme.textSecondary.withOpacity(0.4), size: 22),
-            const SizedBox(width: 12),
-            Text('Saha, maç, oyuncu veya takım ara...', style: TextStyle(fontSize: 14, color: AppTheme.textHint, fontWeight: FontWeight.w500)),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildKonumBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 2),
-      child: GestureDetector(
-        onTap: _konumSec,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryGreen.withOpacity(0.14),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.primaryGreen.withOpacity(0.25)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.location_on_rounded, size: 18, color: AppTheme.primaryGreen),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _konumSecim?.etiket ?? 'Ulke / Sehir / Ilce sec',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+      child: Row(
+        children: [
+          // Sol: selamlama
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(greetIcon, size: 16, color: AppTheme.lightOrange),
+                    const SizedBox(width: 6),
+                    Text(greeting,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary.withOpacity(0.7),
+                        fontWeight: FontWeight.w500,
+                      )),
+                  ],
                 ),
-              ),
-              Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppTheme.textSecondary.withOpacity(0.8)),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  user?.adSoyad ?? 'Kullanıcı',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ],
+            ),
           ),
+          // Sağ: bildirim
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BildirimlerScreen())),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppTheme.cardDark,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withOpacity(0.04)),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  const Icon(Icons.notifications_none_rounded, color: AppTheme.textSecondary, size: 22),
+                  Consumer<BildirimProvider>(
+                    builder: (context, bp, _) {
+                      if (bp.okunmamisSayisi == 0) return const SizedBox.shrink();
+                      return Positioned(
+                        top: 10, right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: AppTheme.accentCoral, shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                          child: bp.okunmamisSayisi > 9 ? const SizedBox.shrink() : null,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // KONUM + ARAMA BİRLEŞİK KART
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildKonumVeArama() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withOpacity(0.04)),
+        ),
+        child: Column(
+          children: [
+            // Konum satırı
+            GestureDetector(
+              onTap: _konumSec,
+              child: Builder(
+                builder: (context) {
+                  final kp = context.watch<KonumProvider>();
+                  return Row(
+                    children: [
+                      Container(
+                        width: 34, height: 34,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryGreen.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.location_on_rounded, size: 18, color: AppTheme.primaryGreen),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Konum',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500,
+                                color: AppTheme.textSecondary.withOpacity(0.5)),
+                            ),
+                            Text(
+                              kp.konumEtiketi ?? 'Konum seç — tüm ilanları gör',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: kp.konumSecildi
+                                    ? AppTheme.textPrimary
+                                    : AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (kp.konumSecildi)
+                        GestureDetector(
+                          onTap: () {
+                            context.read<KonumProvider>().konumTemizle();
+                            _yukle();
+                          },
+                          child: Container(
+                            width: 28, height: 28,
+                            decoration: BoxDecoration(
+                              color: AppTheme.errorRed.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.close_rounded, size: 16, color: AppTheme.errorRed),
+                          ),
+                        )
+                      else
+                        Icon(Icons.keyboard_arrow_down_rounded, size: 20,
+                          color: AppTheme.textSecondary.withOpacity(0.5)),
+                    ],
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Divider(height: 1, color: Colors.white.withOpacity(0.04)),
+            ),
+            // Arama satırı
+            GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AramaScreen())),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentBlue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.search_rounded, size: 18, color: AppTheme.accentBlue),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Saha, maç, oyuncu veya takım ara...',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textHint,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios_rounded, size: 14,
+                    color: AppTheme.textSecondary.withOpacity(0.3)),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // HIZLI ERİŞİM BUTONLARI
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildQuickActions(bool isIsletme) {
+    final actions = isIsletme
+        ? [
+            _QA('Saha Ekle', Icons.add_business_rounded, AppTheme.primaryGreen, null),
+            _QA('Rezervasyonlar', Icons.calendar_month_rounded, AppTheme.accentPurple, null),
+            _QA('İstatistik', Icons.bar_chart_rounded, AppTheme.accentBlue, null),
+          ]
+        : [
+            _QA('Maç Oluştur', Icons.add_circle_outline_rounded, AppTheme.accentCoral,
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MacOlusturScreen()))),
+            _QA('İlan Ver', Icons.person_add_rounded, AppTheme.accentPurple,
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TakimIlaniOlusturScreen()))),
+          ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+      child: Row(
+        children: actions.map((a) => Expanded(
+          child: GestureDetector(
+            onTap: a.onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Column(
+                children: [
+                  Container(
+                    width: 54, height: 54,
+                    decoration: BoxDecoration(
+                      color: a.color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: a.color.withOpacity(0.12)),
+                    ),
+                    child: Icon(a.icon, color: a.color, size: 24),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(a.label, textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 10, fontWeight: FontWeight.w600,
+                      color: AppTheme.textSecondary.withOpacity(0.7),
+                    ),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ),
+        )).toList(),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // BÖLÜM BAŞLIĞI
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildSectionHeader({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    String? badge,
+    VoidCallback? onTumunuGor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 12),
+      child: Row(
+        children: [
+          Container(
+            width: 30, height: 30,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 16, color: iconColor),
+          ),
+          const SizedBox(width: 10),
+          Text(title, style: const TextStyle(
+            fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
+          )),
+          if (badge != null) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(badge, style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w700, color: iconColor,
+              )),
+            ),
+          ],
+          const Spacer(),
+          if (onTumunuGor != null)
+            GestureDetector(
+              onTap: onTumunuGor,
+              child: Row(children: [
+                Text('Tümü', style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w600,
+                  color: iconColor.withOpacity(0.7),
+                )),
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_forward_ios_rounded, size: 12,
+                  color: iconColor.withOpacity(0.5)),
+              ]),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // MAÇLAR — YATAY KART LİSTESİ
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildMaclarHorizontal() {
+    return SizedBox(
+      height: 180,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _tumMaclar.length,
+        itemBuilder: (context, index) => _buildMacKart(_tumMaclar[index]),
+      ),
+    );
+  }
+
+  Widget _buildDigerMaclarHorizontal() {
+    return SizedBox(
+      height: 180,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _digerMaclar.length,
+        itemBuilder: (context, index) => _buildMacKart(_digerMaclar[index]),
+      ),
+    );
+  }
+
+  Widget _buildMacKart(Mac mac) {
+    final renk = mac.macTipi == 'RAKIP_ARANIYOR'
+        ? AppTheme.accentCoral
+        : mac.macTipi == 'EKSIK_OYUNCU'
+            ? AppTheme.accentBlue
+            : AppTheme.primaryGreen;
+
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => MacDetayScreen(macId: mac.id)));
+        _yukle();
+      },
+      child: Container(
+        width: 240,
+        margin: const EdgeInsets.symmetric(horizontal: 6),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: renk.withOpacity(0.1)),
+          boxShadow: [
+            BoxShadow(color: renk.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Üst: Tarih + Badge'ler
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: renk.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(mac.format, style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w700, color: renk,
+                  )),
+                ),
+                const SizedBox(width: 6),
+                if (mac.macTipi != 'NORMAL')
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentPurple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(mac.macTipiText, style: const TextStyle(
+                      fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.accentPurple,
+                    )),
+                  ),
+                const Spacer(),
+                Text(mac.baslangicSaati, style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w700,
+                  color: AppTheme.textSecondary.withOpacity(0.6),
+                )),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Başlık
+            Text(mac.macBasligi, style: const TextStyle(
+              fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
+            ), maxLines: 2, overflow: TextOverflow.ellipsis),
+            const Spacer(),
+            // Alt bilgi
+            Row(
+              children: [
+                Icon(Icons.calendar_today_rounded, size: 12,
+                  color: AppTheme.textSecondary.withOpacity(0.4)),
+                const SizedBox(width: 4),
+                Text(mac.macTarihi, style: TextStyle(
+                  fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.5),
+                )),
+                const Spacer(),
+                // Doluluk göstergesi
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: mac.doluMu
+                        ? AppTheme.errorRed.withOpacity(0.1)
+                        : AppTheme.primaryGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.people_rounded, size: 12,
+                        color: mac.doluMu ? AppTheme.errorRed : AppTheme.primaryGreen),
+                      const SizedBox(width: 4),
+                      Text('${mac.mevcutOyuncuSayisi}/${mac.maxOyuncuSayisi}',
+                        style: TextStyle(
+                          fontSize: 11, fontWeight: FontWeight.w700,
+                          color: mac.doluMu ? AppTheme.errorRed : AppTheme.primaryGreen,
+                        )),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // TAKIM İLANLARI — YATAY KART LİSTESİ
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildTakimIlanlariHorizontal() {
+    final goster = _takimIlanlari.take(8).toList();
+    return SizedBox(
+      height: 150,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: goster.length,
+        itemBuilder: (_, i) => _buildTakimIlaniKart(goster[i]),
+      ),
+    );
+  }
+
+  Widget _buildTakimIlaniKart(TakimIlani ilan) {
+    return GestureDetector(
+      onTap: () {},
+      child: Stack(
+        children: [
+          Container(
+            width: 220,
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.cardDark,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppTheme.accentPurple.withOpacity(0.1)),
+              boxShadow: [
+                BoxShadow(color: AppTheme.accentPurple.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentPurple.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(ilan.pozisyonText, style: const TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.accentPurple,
+                      )),
+                    ),
+                    const Spacer(),
+                    Text(ilan.seviyeText, style: TextStyle(
+                      fontSize: 10, fontWeight: FontWeight.w600,
+                      color: AppTheme.textSecondary.withOpacity(0.5),
+                    )),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(ilan.ilanBasligi, style: const TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
+                ), maxLines: 2, overflow: TextOverflow.ellipsis),
+                const Spacer(),
+                Row(
+                  children: [
+                    const Icon(Icons.shield_rounded, size: 12, color: AppTheme.accentBlue),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(ilan.takimAdi, style: TextStyle(
+                        fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6),
+                      ), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryGreen.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text('${ilan.arananOyuncuSayisi} Oyuncu', style: const TextStyle(
+                        fontSize: 9, fontWeight: FontWeight.w700, color: AppTheme.primaryGreen,
+                      )),
+                    ),
+                    if (ilan.olusturanId != context.read<AuthProvider>().currentUserId)
+                      GestureDetector(
+                        onTap: () => _ilanKatilDialog(ilan),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: AppTheme.buttonGradient,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text('Katıl', style: TextStyle(
+                            fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.backgroundDark,
+                          )),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _ilanKatilDialog(TakimIlani ilan) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(ilan.takimAdi, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('İletişim Bilgisi ve Not', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'Örn: Telefon numaram 05...',
+                hintStyle: TextStyle(color: AppTheme.textHint.withOpacity(0.5)),
+                filled: true,
+                fillColor: AppTheme.inputFill,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç', style: TextStyle(color: AppTheme.textSecondary))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: AppTheme.backgroundDark),
+            onPressed: () {
+              if (controller.text.trim().isEmpty) return;
+              Navigator.pop(ctx);
+              _katilmaIstegiGonder(ilan.id, controller.text.trim());
+            },
+            child: const Text('İstek Gönder'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _katilmaIstegiGonder(String ilanId, String mesaj) async {
+    final res = await _takimIlaniService.katilmaIstegiGonder(ilanId, mesaj);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res.mesaj),
+        backgroundColor: res.basarili ? AppTheme.primaryGreen : AppTheme.errorRed,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ));
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SAHALAR — 2'Lİ GRİD KART
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildSahalarGrid() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: [
+          for (int i = 0; i < _populerSahalar.length; i += 2)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Expanded(child: _buildSahaKart(_populerSahalar[i])),
+                  const SizedBox(width: 10),
+                  if (i + 1 < _populerSahalar.length)
+                    Expanded(child: _buildSahaKart(_populerSahalar[i + 1]))
+                  else
+                    const Expanded(child: SizedBox()),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSahaKart(Saha saha) {
+    return GestureDetector(
+      onTap: () => Navigator.push(context,
+        MaterialPageRoute(builder: (_) => SahaDetayScreen(sahaId: saha.id))),
+      child: Container(
+        height: 130,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.accentBlue.withOpacity(0.06)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // İkon + isim
+            Row(
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.glassGradient,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.stadium_rounded, color: AppTheme.primaryGreen, size: 16),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(saha.sahaAdi, style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
+                  ), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Adres
+            Row(
+              children: [
+                Icon(Icons.location_on_outlined, size: 12,
+                  color: AppTheme.textSecondary.withOpacity(0.4)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(saha.adres, style: TextStyle(
+                    fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.5),
+                  ), maxLines: 2, overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+            const Spacer(),
+            // Puan + Fiyat
+            Row(
+              children: [
+                const Icon(Icons.star_rounded, color: AppTheme.amber, size: 14),
+                const SizedBox(width: 3),
+                Text(saha.puanOrtalamasi.toStringAsFixed(1), style: const TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
+                )),
+                const Spacer(),
+                Text('₺${saha.saatlikUcret.toStringAsFixed(0)}/s', style: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w800, color: AppTheme.primaryGreen,
+                )),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════
+  // BOŞ EKRAN
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildBosEkran() {
+    return Padding(
+      padding: const EdgeInsets.all(40),
+      child: Column(
+        children: [
+          Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(
+              color: AppTheme.cardDark,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withOpacity(0.04)),
+            ),
+            child: Icon(Icons.explore_off_rounded, size: 36,
+              color: AppTheme.textSecondary.withOpacity(0.2)),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            context.read<KonumProvider>().konumSecildi
+                ? 'Bu konumda sonuç bulunamadı'
+                : 'Henüz içerik yok',
+            style: TextStyle(
+              fontSize: 15, fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary.withOpacity(0.5),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            context.read<KonumProvider>().konumSecildi
+                ? 'Farklı bir konum seçmeyi deneyin'
+                : 'Maç oluşturarak başlayabilirsiniz',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppTheme.textSecondary.withOpacity(0.3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // KONUM FİLTRELEME
+  // ═══════════════════════════════════════════════════════════════
 
   Future<void> _konumSec() async {
+    final konumProvider = context.read<KonumProvider>();
     final secim = await showKonumSecimSheet(
       context,
-      initialUlke: _konumSecim?.ulke,
-      initialIl: _konumSecim?.il,
-      initialIlce: _konumSecim?.ilce,
+      initialUlke: konumProvider.seciliKonum?.ulke,
+      initialIl: konumProvider.seciliKonum?.il,
+      initialIlce: konumProvider.seciliKonum?.ilce,
       showCurrentLocationButton: true,
     );
     if (!mounted || secim == null) return;
     if (secim.mevcutKonumSecildi) {
       try {
-        final k = await _konumService.mevcutKonumuAl();
+        final basarili = await konumProvider.mevcutKonumdanSec();
         if (!mounted) return;
-        final yeni = KonumSecim(ulke: 'Turkiye', il: k.il ?? '', ilce: k.ilce ?? '');
-        setState(() {
-          _konumSecim = yeni;
-          _konumAramaMetni = yeni.aramaMetni.trim();
-        });
-        _yukle();
+        if (basarili) {
+          _yukle();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Konum alınamadı')),
+          );
+        }
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -252,392 +980,43 @@ class _KesfetTabState extends State<KesfetTab> {
       }
       return;
     }
-    setState(() {
-      _konumSecim = secim;
-      _konumAramaMetni = secim.aramaMetni;
-    });
+    konumProvider.konumSec(secim);
     _yukle();
   }
 
-  List<Saha> _konumaGoreSahaFiltrele(List<Saha> sahalar) {
-    final metin = (_konumAramaMetni ?? '').toLowerCase();
+  List<Saha> _konumaGoreSahaFiltrele(List<Saha> sahalar, String metin) {
     if (metin.isEmpty) return sahalar;
-    return sahalar.where((s) {
-      final adres = s.adres.toLowerCase();
-      return metin.isNotEmpty && adres.contains(metin);
-    }).toList();
+    return sahalar.where((s) => s.adres.toLowerCase().contains(metin)).toList();
   }
 
-  List<Mac> _konumaGoreMacFiltrele(List<Mac> maclar) {
-    final metin = (_konumAramaMetni ?? '').toLowerCase();
+  List<Mac> _konumaGoreMacFiltrele(List<Mac> maclar, String metin) {
     if (metin.isEmpty) return maclar;
     return maclar.where((m) {
       final alanlar = [
-        m.sahaAdi ?? '',
-        m.macBasligi,
-        m.aciklama ?? '',
-        m.takimAdi ?? '',
-        m.rakipNotu ?? '',
+        m.il ?? '', m.ilce ?? '', m.sahaAdi ?? '',
+        m.macBasligi, m.aciklama ?? '', m.takimAdi ?? '',
       ].join(' ').toLowerCase();
       return alanlar.contains(metin);
     }).toList();
   }
 
-  List<TakimIlani> _konumaGoreIlanFiltrele(List<TakimIlani> ilanlar) {
-    final metin = (_konumAramaMetni ?? '').toLowerCase();
+  List<TakimIlani> _konumaGoreIlanFiltrele(List<TakimIlani> ilanlar, String metin) {
     if (metin.isEmpty) return ilanlar;
     return ilanlar.where((i) {
       final alanlar = [
-        i.konum ?? '',
-        i.ilanBasligi,
-        i.aciklama ?? '',
-        i.takimAdi,
+        i.konum ?? '', i.ilanBasligi, i.aciklama ?? '', i.takimAdi,
       ].join(' ').toLowerCase();
       return alanlar.contains(metin);
     }).toList();
   }
 
-  Widget _buildQuickActions(bool isIsletme) {
-    final actions = isIsletme
-        ? [
-            _QuickAction('Saha Ekle', Icons.add_business_rounded, AppTheme.primaryGreen),
-            _QuickAction('Rezervasyonlar', Icons.calendar_month_rounded, AppTheme.accentPurple),
-            _QuickAction('İstatistik', Icons.bar_chart_rounded, AppTheme.accentBlue),
-            _QuickAction('Arama', Icons.search_rounded, AppTheme.accentCoral),
-          ]
-        : [
-            _QuickAction('Maç Oluştur', Icons.add_circle_outline_rounded, AppTheme.accentCoral),
-            _QuickAction('Takıma Oyuncu İlanı', Icons.person_add_rounded, AppTheme.accentPurple),
-          ];
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
-      child: Row(children: actions.asMap().entries.map((entry) {
-        final i = entry.key;
-        final a = entry.value;
-        return Expanded(child: _buildQuickActionItem(a, i, isIsletme));
-      }).toList()),
-    );
-  }
-
-  Widget _buildQuickActionItem(_QuickAction action, int index, bool isIsletme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: GestureDetector(
-        onTap: () {
-          if (!isIsletme && index == 0) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const MacOlusturScreen()));
-          } else if (!isIsletme && index == 1) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const TakimIlaniOlusturScreen()));
-          } else if (isIsletme && index == 3) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const AramaScreen()));
-          }
-        },
-        child: Column(children: [
-          Container(
-            width: 56, height: 56,
-            decoration: BoxDecoration(
-              color: action.color.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: action.color.withOpacity(0.08)),
-            ),
-            child: Icon(action.icon, color: action.color, size: 24),
-          ),
-          const SizedBox(height: 8),
-          Text(action.label, textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withOpacity(0.7)),
-            maxLines: 1, overflow: TextOverflow.ellipsis),
-        ]),
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title, VoidCallback? onTumunuGor) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 14),
-      child: Row(children: [
-        Container(width: 3, height: 18,
-          decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(2))),
-        const SizedBox(width: 10),
-        Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-        const Spacer(),
-        if (onTumunuGor != null)
-          GestureDetector(
-            onTap: onTumunuGor,
-            child: Row(children: [
-              Text('Tümünü Gör', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.primaryGreen.withOpacity(0.7))),
-              const SizedBox(width: 4),
-              Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppTheme.primaryGreen.withOpacity(0.5)),
-            ]),
-          ),
-      ]),
-    );
-  }
-
-  Widget _buildMaclarBaslik() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-      child: Row(children: [
-        Container(width: 3, height: 18,
-          decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(2))),
-        const SizedBox(width: 10),
-        const Text('Açık Maçlar', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-        const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(color: AppTheme.primaryGreen.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-          child: Text('${_filtrelenmislMaclar.length}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.primaryGreen)),
-        ),
-      ]),
-    );
-  }
-
-  Widget _buildMacFiltreler() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
-      child: Column(children: [
-        SizedBox(
-          height: 34,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            children: [
-              ..._formatFiltreler.map((f) {
-                final sel = _macFormatFiltre == f;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _macFormatFiltre = f),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        gradient: sel ? AppTheme.buttonGradient : null,
-                        color: sel ? null : AppTheme.cardDark,
-                        borderRadius: BorderRadius.circular(10),
-                        border: sel ? null : Border.all(color: Colors.white.withOpacity(0.03)),
-                      ),
-                      child: Text(f ?? 'Tüm Format', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-                        color: sel ? AppTheme.backgroundDark : AppTheme.textSecondary)),
-                    ),
-                  ),
-                );
-              }),
-              const SizedBox(width: 8),
-              ...['NORMAL', 'RAKIP_ARANIYOR', 'EKSIK_OYUNCU'].map((t) {
-                final sel = _macTipiFiltre == t;
-                final label = t == 'NORMAL' ? 'Normal' : t == 'RAKIP_ARANIYOR' ? 'Rakip Aranıyor' : 'Eksik Oyuncu';
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _macTipiFiltre = sel ? null : t),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        gradient: sel ? LinearGradient(colors: [AppTheme.accentBlue, AppTheme.accentBlue.withOpacity(0.8)]) : null,
-                        color: sel ? null : AppTheme.cardDark,
-                        borderRadius: BorderRadius.circular(10),
-                        border: sel ? null : Border.all(color: AppTheme.accentBlue.withOpacity(0.08)),
-                      ),
-                      child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-                        color: sel ? Colors.white : AppTheme.accentBlue.withOpacity(0.6))),
-                    ),
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-      ]),
-    );
-  }
-
-  Widget _buildTakimIlanlariList() {
-    final gosterilecek = _takimIlanlari.take(5).toList();
-    return SizedBox(
-      height: 140,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: gosterilecek.length,
-        itemBuilder: (context, index) => _buildTakimIlaniCard(gosterilecek[index]),
-      ),
-    );
-  }
-
-  Widget _buildTakimIlaniCard(TakimIlani ilan) {
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TakimIlanlariScreen())),
-      child: Container(
-        width: 220,
-        margin: const EdgeInsets.symmetric(horizontal: 6),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppTheme.cardDark,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.accentPurple.withOpacity(0.08)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: AppTheme.accentBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-              child: Text(ilan.takimAdi, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.accentBlue),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: AppTheme.accentPurple.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-              child: Text(ilan.pozisyonText, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.accentPurple)),
-            ),
-          ]),
-          const SizedBox(height: 10),
-          Text(ilan.ilanBasligi, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
-            maxLines: 2, overflow: TextOverflow.ellipsis),
-          const Spacer(),
-          Row(children: [
-            Icon(Icons.person_rounded, size: 14, color: AppTheme.textSecondary.withOpacity(0.5)),
-            const SizedBox(width: 4),
-            Text('${ilan.arananOyuncuSayisi} oyuncu', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withOpacity(0.6))),
-            const Spacer(),
-            Text(ilan.seviyeText, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withOpacity(0.5))),
-          ]),
-        ]),
-      ),
-    );
-  }
-
-  Widget _buildMacItem(Mac mac) {
-    final renk = mac.doluMu ? AppTheme.accentCoral : AppTheme.primaryGreen;
-
-    return GestureDetector(
-      onTap: () async {
-        await Navigator.push(context, MaterialPageRoute(builder: (_) => MacDetayScreen(macId: mac.id)));
-        _yukle();
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.cardDark, borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.03)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            _buildBadge(mac.format, renk),
-            const SizedBox(width: 6),
-            _buildBadge(mac.seviyeText, AppTheme.accentPurple),
-            if (mac.macTipi != 'NORMAL') ...[
-              const SizedBox(width: 6),
-              _buildBadge(mac.macTipiText, AppTheme.accentBlue),
-            ],
-            const Spacer(),
-            Text(mac.baslangicSaati, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-              color: AppTheme.textSecondary.withOpacity(0.5))),
-          ]),
-          const SizedBox(height: 10),
-          Text(mac.macBasligi, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-          const SizedBox(height: 6),
-          Row(children: [
-            if (mac.sahaAdi != null) ...[
-              Icon(Icons.location_on_outlined, size: 13, color: AppTheme.textSecondary.withOpacity(0.4)),
-              const SizedBox(width: 3),
-              Expanded(child: Text(mac.sahaAdi!, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.6)),
-                maxLines: 1, overflow: TextOverflow.ellipsis)),
-            ] else
-              Expanded(child: Text(mac.macTarihi, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.6)))),
-            if (mac.eksikOyuncuMu && mac.eksikOyuncuSayisi != null) ...[
-              Icon(Icons.person_search_rounded, size: 14, color: AppTheme.accentBlue),
-              const SizedBox(width: 4),
-              Text('${mac.eksikOyuncuSayisi} kişi aranıyor',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.accentBlue)),
-            ] else ...[
-              Text('${mac.mevcutOyuncuSayisi}/${mac.maxOyuncuSayisi}',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withOpacity(0.6))),
-            ],
-            if (mac.ucretPerKisi > 0) ...[
-              const SizedBox(width: 8),
-              Text('₺${mac.ucretPerKisi.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.primaryGreen)),
-            ],
-          ]),
-        ]),
-      ),
-    );
-  }
-
-  Widget _buildBadge(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-      child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
-    );
-  }
-
-  Widget _buildSahalarList() {
-    return SizedBox(
-      height: 120,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _populerSahalar.length,
-        itemBuilder: (context, index) => _buildSahaCard(_populerSahalar[index]),
-      ),
-    );
-  }
-
-  Widget _buildSahaCard(Saha saha) {
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SahaDetayScreen(sahaId: saha.id))),
-      child: Container(
-        width: 200,
-        margin: const EdgeInsets.symmetric(horizontal: 6),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.cardDark, borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.03)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(gradient: AppTheme.glassGradient, borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.stadium_rounded, color: AppTheme.primaryGreen, size: 18),
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(saha.sahaAdi, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-              Row(children: [
-                Icon(Icons.location_on_outlined, size: 11, color: AppTheme.textSecondary.withOpacity(0.5)),
-                const SizedBox(width: 2),
-                Expanded(child: Text(saha.adres, style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.5)),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
-              ]),
-            ])),
-          ]),
-          const Spacer(),
-          Row(children: [
-            const Icon(Icons.star_rounded, color: AppTheme.amber, size: 15),
-            const SizedBox(width: 4),
-            Text(saha.puanOrtalamasi.toStringAsFixed(1), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-            const Spacer(),
-            Text('₺${saha.saatlikUcret.toStringAsFixed(0)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.primaryGreen)),
-          ]),
-        ]),
-      ),
-    );
-  }
 }
 
-class _QuickAction {
+class _QA {
   final String label;
   final IconData icon;
   final Color color;
-  _QuickAction(this.label, this.icon, this.color);
+  final VoidCallback? onTap;
+  _QA(this.label, this.icon, this.color, this.onTap);
 }

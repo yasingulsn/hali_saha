@@ -221,6 +221,81 @@ public class AuthService {
         }
     }
 
+    // ─── PROFİL ──────────────────────────────────────────────────
+
+    @Transactional
+    public com.halisaha.dto.ProfilResponse profilDetay(java.util.UUID kullaniciId) {
+        Kullanici k = Kullanici.findById(kullaniciId);
+        if (k == null) {
+            throw new AuthException("Kullanıcı bulunamadı", 404);
+        }
+
+        com.halisaha.dto.ProfilResponse r = new com.halisaha.dto.ProfilResponse();
+        r.id = k.id.toString();
+        r.adSoyad = k.adSoyad;
+        r.email = k.email;
+        r.telefon = k.telefon;
+        r.profilFotoUrl = k.profilFotoUrl;
+        r.tercihEdilenPozisyon = k.tercihEdilenPozisyon;
+        r.disiplinPuani = k.disiplinPuani;
+        r.puanOrtalamasi = k.puanOrtalamasi;
+        r.yorumSayisi = k.yorumSayisi;
+        r.hesapDurumu = k.hesapDurumu;
+        r.il = k.il;
+        r.ilce = k.ilce;
+
+        if (k.dogumTarihi != null) {
+            r.dogumTarihi = k.dogumTarihi.toString();
+        }
+        if (k.kayitTarihi != null) {
+            r.kayitTarihi = k.kayitTarihi.toString();
+        }
+
+        // İstatistikler
+        r.toplamMacSayisi = MacKatilimci.count("kullaniciId = ?1 AND katilimDurumu = 'ONAYLANDI'", kullaniciId);
+        r.olusturduguMacSayisi = Mac.count("olusturanId", kullaniciId);
+        r.toplamIlanSayisi = TakimIlani.count("olusturanId", kullaniciId);
+
+        return r;
+    }
+
+    @Transactional
+    public com.halisaha.dto.ProfilResponse profilGuncelle(java.util.UUID kullaniciId,
+                                                           com.halisaha.dto.ProfilGuncelleRequest req) {
+        Kullanici k = Kullanici.findById(kullaniciId);
+        if (k == null) {
+            throw new AuthException("Kullanıcı bulunamadı", 404);
+        }
+
+        k.adSoyad = req.adSoyad.trim();
+        k.telefon = req.telefon;
+        k.tercihEdilenPozisyon = req.tercihEdilenPozisyon;
+        k.il = req.il;
+        k.ilce = req.ilce;
+
+        if (req.dogumTarihi != null && !req.dogumTarihi.isBlank()) {
+            try {
+                k.dogumTarihi = java.time.LocalDate.parse(req.dogumTarihi);
+            } catch (Exception e) {
+                throw new AuthException("Geçersiz doğum tarihi formatı. yyyy-MM-dd kullanınız.", 400);
+            }
+        }
+
+        k.persist();
+
+        return profilDetay(kullaniciId);
+    }
+
+    @Transactional
+    public void konumGuncelle(java.util.UUID kullaniciId, com.halisaha.dto.KonumGuncelleRequest req) {
+        Kullanici k = Kullanici.findById(kullaniciId);
+        if (k != null) {
+            k.il = req.il;
+            k.ilce = req.ilce;
+            k.persist();
+        }
+    }
+
     // ─── YARDIMCI METODLAR ──────────────────────────────────────
 
     private TokenResponse generateTokenResponse(java.util.UUID userId, String email,

@@ -67,6 +67,12 @@ public class Kullanici extends PanacheEntityBase {
     @Column(name = "hesap_durumu", length = 20)
     public String hesapDurumu = "AKTIF";
 
+    @Column(name = "il", length = 50)
+    public String il;
+
+    @Column(name = "ilce", length = 50)
+    public String ilce;
+
     public static Kullanici findByEmail(String email) {
         return find("email", email).firstResult();
     }

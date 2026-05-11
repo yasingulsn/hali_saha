@@ -73,10 +73,13 @@ class AramaService {
 
   AramaService(this._apiClient);
 
-  Future<ApiResponse<AramaSonuc>> birlesikArama(String query, {String? tip}) async {
+  Future<ApiResponse<AramaSonuc>> birlesikArama(String query, {String? tip, String? il, String? ilce}) async {
     try {
-      final params = <String, dynamic>{'q': query};
+      final params = <String, dynamic>{};
+      if (query.isNotEmpty) params['q'] = query;
       if (tip != null) params['tip'] = tip;
+      if (il != null && il.isNotEmpty) params['il'] = il;
+      if (ilce != null && ilce.isNotEmpty) params['ilce'] = ilce;
 
       final response = await _apiClient.dio.get(
         ApiConstants.birlesikArama,

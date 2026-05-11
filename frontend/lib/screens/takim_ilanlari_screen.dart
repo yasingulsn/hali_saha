@@ -441,7 +441,7 @@ class _TakimIlanlariScreenState extends State<TakimIlanlariScreen> {
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _IlanDetaySheet(
+      builder: (_) => TakimIlaniDetaySheet(
         ilan: ilan,
         benimMi: ilan.olusturanId == userId,
         onDegisti: _yukle,
@@ -450,11 +450,11 @@ class _TakimIlanlariScreenState extends State<TakimIlanlariScreen> {
   }
 }
 
-class _IlanDetaySheet extends StatelessWidget {
+class TakimIlaniDetaySheet extends StatelessWidget {
   final TakimIlani ilan;
   final bool benimMi;
   final VoidCallback onDegisti;
-  const _IlanDetaySheet({required this.ilan, required this.benimMi, required this.onDegisti});
+  const TakimIlaniDetaySheet({required this.ilan, required this.benimMi, required this.onDegisti});
 
   @override
   Widget build(BuildContext context) {
@@ -553,14 +553,71 @@ class _IlanDetaySheet extends StatelessWidget {
                     ],
                   )
                 else
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    decoration: BoxDecoration(gradient: AppTheme.buttonGradient, borderRadius: BorderRadius.circular(16)),
-                    child: const Center(child: Text('İletişime Geç',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.backgroundDark))),
+                  GestureDetector(
+                    onTap: () => _katilDialog(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(gradient: AppTheme.buttonGradient, borderRadius: BorderRadius.circular(16)),
+                      child: const Center(child: Text('Katıl',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.backgroundDark))),
+                    ),
                   ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _katilDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(ilan.takimAdi, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('İletişim Bilgisi ve Not', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'Örn: Telefon numaram 05...',
+                hintStyle: TextStyle(color: AppTheme.textHint.withOpacity(0.5)),
+                filled: true,
+                fillColor: AppTheme.inputFill,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç', style: TextStyle(color: AppTheme.textSecondary))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: AppTheme.backgroundDark),
+            onPressed: () async {
+              if (controller.text.trim().isEmpty) return;
+              Navigator.pop(ctx);
+              final service = TakimIlaniService(ApiClient());
+              final res = await service.katilmaIstegiGonder(ilan.id, controller.text.trim());
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(res.mesaj),
+                  backgroundColor: res.basarili ? AppTheme.primaryGreen : AppTheme.errorRed,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ));
+                if (res.basarili) Navigator.pop(context);
+              }
+            },
+            child: const Text('İstek Gönder'),
           ),
         ],
       ),

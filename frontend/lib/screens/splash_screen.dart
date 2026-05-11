@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/konum_provider.dart';
 import '../utils/theme.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
@@ -66,12 +67,21 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
+    // Önce local storage'dan konumu yükle (hızlı erişim)
+    await context.read<KonumProvider>().loadFromStorage();
+
+    if (!mounted) return;
+
     final authProvider = context.read<AuthProvider>();
     await authProvider.checkAuthStatus();
 
     if (!mounted) return;
 
     if (authProvider.isAuthenticated) {
+      // Eğer local'de konum yoksa, profildeki konumu kullan
+      if (mounted && authProvider.currentUser != null) {
+        context.read<KonumProvider>().initializeFromProfile(authProvider.currentUser!);
+      }
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );

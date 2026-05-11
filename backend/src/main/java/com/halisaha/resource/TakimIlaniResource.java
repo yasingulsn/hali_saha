@@ -3,6 +3,7 @@ package com.halisaha.resource;
 import com.halisaha.dto.ApiResponse;
 import com.halisaha.dto.TakimIlaniRequest;
 import com.halisaha.dto.TakimIlaniResponse;
+import com.halisaha.dto.TakimIlaniIstekRequest;
 import com.halisaha.service.TakimIlaniService;
 import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
@@ -97,5 +98,41 @@ public class TakimIlaniResource {
         }
         List<TakimIlaniResponse> sonuclar = takimIlaniService.ilanlarAra(query.trim());
         return Response.ok(ApiResponse.basarili("Arama sonuçları", sonuclar)).build();
+    }
+
+    @POST
+    @Path("/istek")
+    @RolesAllowed("KULLANICI")
+    public Response katilmaIstegiGonder(@Valid TakimIlaniIstekRequest request) {
+        UUID kullaniciId = UUID.fromString(jwt.getSubject());
+        takimIlaniService.katilmaIstegiGonder(request.ilanId, request.mesaj, kullaniciId);
+        return Response.ok(ApiResponse.basarili("Katılma isteğiniz gönderildi")).build();
+    }
+
+    @GET
+    @Path("/gelen-istekler")
+    @RolesAllowed("KULLANICI")
+    public Response gelenIstekler() {
+        UUID kullaniciId = UUID.fromString(jwt.getSubject());
+        List<com.halisaha.dto.TakimIlaniIstekResponse> istekler = takimIlaniService.gelenIstekler(kullaniciId);
+        return Response.ok(ApiResponse.basarili("Gelen istekler listelendi", istekler)).build();
+    }
+
+    @POST
+    @Path("/istek/{id}/onayla")
+    @RolesAllowed("KULLANICI")
+    public Response istekOnayla(@PathParam("id") UUID id) {
+        UUID kullaniciId = UUID.fromString(jwt.getSubject());
+        takimIlaniService.istekOnayla(id, kullaniciId);
+        return Response.ok(ApiResponse.basarili("İstek onaylandı")).build();
+    }
+
+    @POST
+    @Path("/istek/{id}/reddet")
+    @RolesAllowed("KULLANICI")
+    public Response istekReddet(@PathParam("id") UUID id) {
+        UUID kullaniciId = UUID.fromString(jwt.getSubject());
+        takimIlaniService.istekReddet(id, kullaniciId);
+        return Response.ok(ApiResponse.basarili("İstek reddedildi")).build();
     }
 }

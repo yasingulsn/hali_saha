@@ -97,7 +97,8 @@ public class Mac extends PanacheEntityBase {
     }
 
     public static List<Mac> findByOlusturanId(UUID olusturanId) {
-        return list("olusturanId = ?1 ORDER BY olusturulmaTarihi DESC", olusturanId);
+        return list("olusturanId = ?1 AND macTarihi >= ?2 ORDER BY macTarihi ASC", 
+                olusturanId, java.time.LocalDate.now());
     }
 
     public static List<Mac> findBySahaId(UUID sahaId) {
@@ -131,5 +132,22 @@ public class Mac extends PanacheEntityBase {
                         "sahaId IN (SELECT s.id FROM HaliSaha s WHERE LOWER(s.sahaAdi) LIKE ?2 OR LOWER(s.adres) LIKE ?2)" +
                         ") ORDER BY macTarihi ASC, baslangicSaati ASC",
                 LocalDate.now(), like);
+    }
+
+    public static List<Mac> findByKonum(String il, String ilce) {
+        if (ilce != null && !ilce.isEmpty()) {
+            return list(
+                    "macDurumu = 'ACIK' AND macTarihi >= ?1 AND (" +
+                            "(LOWER(COALESCE(il, '')) LIKE ?2 AND LOWER(COALESCE(ilce, '')) LIKE ?3) OR " +
+                            "sahaId IN (SELECT s.id FROM HaliSaha s WHERE LOWER(s.adres) LIKE ?2 AND LOWER(s.adres) LIKE ?3)" +
+                            ") ORDER BY macTarihi ASC, baslangicSaati ASC",
+                    LocalDate.now(), "%" + il.toLowerCase() + "%", "%" + ilce.toLowerCase() + "%");
+        }
+        return list(
+                "macDurumu = 'ACIK' AND macTarihi >= ?1 AND (" +
+                        "LOWER(COALESCE(il, '')) LIKE ?2 OR " +
+                        "sahaId IN (SELECT s.id FROM HaliSaha s WHERE LOWER(s.adres) LIKE ?2)" +
+                        ") ORDER BY macTarihi ASC, baslangicSaati ASC",
+                LocalDate.now(), "%" + il.toLowerCase() + "%");
     }
 }

@@ -1,6 +1,7 @@
 package com.halisaha.resource;
 
 import com.halisaha.dto.*;
+import com.halisaha.exception.AuthException;
 import com.halisaha.service.AuthService;
 import io.vertx.core.http.HttpServerRequest;
 import jakarta.annotation.security.PermitAll;
@@ -22,6 +23,9 @@ public class AuthResource {
 
     @Inject
     AuthService authService;
+
+    @Inject
+    com.halisaha.service.SifreSifirlamaService sifreSifirlamaService;
 
     @Inject
     JsonWebToken jwt;
@@ -104,19 +108,73 @@ public class AuthResource {
         return Response.ok(ApiResponse.basarili("Tüm cihazlardan çıkış yapıldı")).build();
     }
 
-    // ─── PROFIL (token test endpoint) ───────────────────────────
+    // ─── ŞİFRE SIFIRLAMA ────────────────────────────────────────
+
+    @POST
+    @Path("/sifre-sifirlama-istegi")
+    @PermitAll
+    public Response sifreSifirlamaIstegi(@Valid SifreSifirlamaRequest request) {
+        sifreSifirlamaService.sifirlamaIstegiOlustur(request.email, request.kullaniciTipi);
+        return Response.ok(ApiResponse.basarili("Eğer hesap mevcutsa sıfırlama linki gönderilmiştir")).build();
+    }
+
+    @POST
+    @Path("/sifre-sifirla")
+    @PermitAll
+    public Response sifreSifirla(@Valid SifreSifirlaRequest request) {
+        sifreSifirlamaService.sifreSifirla(request.token, request.yeniSifre);
+        return Response.ok(ApiResponse.basarili("Şifreniz başarıyla güncellendi")).build();
+    }
+
+    // ─── PROFİL ──────────────────────────────────────────────────
 
     @GET
     @Path("/profil")
-    @RolesAllowed({"KULLANICI", "ISLETME"})
-    public Response profil() {
-        String userId = jwt.getSubject();
-        String email = jwt.getClaim("email");
-        String adSoyad = jwt.getClaim("ad_soyad");
-        String kullaniciTipi = jwt.getClaim("kullanici_tipi");
+    @RolesAllowed({"KULLANICI"})
+    public Response profilDetay() {
+        try {
+            UUID userId = UUID.fromString(jwt.getSubject());
+            ProfilResponse profil = authService.profilDetay(userId);
+            return Response.ok(ApiResponse.basarili("Profil bilgileri", profil)).build();
+        } catch (AuthException e) {
+            throw e;
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(ApiResponse.hata("Profil bilgileri alınırken hata: " + e.getMessage()))
+                    .build();
+        }
+    }
 
-        var bilgi = new TokenResponse.KullaniciBilgi(userId, adSoyad, email, null);
-        return Response.ok(ApiResponse.basarili("Profil bilgileri", bilgi)).build();
+    @PUT
+    @Path("/profil")
+    @RolesAllowed({"KULLANICI"})
+    public Response profilGuncelle(@Valid ProfilGuncelleRequest request) {
+        try {
+            UUID userId = UUID.fromString(jwt.getSubject());
+            ProfilResponse profil = authService.profilGuncelle(userId, request);
+            return Response.ok(ApiResponse.basarili("Profil güncellendi", profil)).build();
+        } catch (AuthException e) {
+            throw e; // ExceptionMapper yakalasın
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(ApiResponse.hata("Profil güncellenirken bir hata oluştu: " + e.getMessage()))
+                    .build();
+        }
+    }
+
+    @PUT
+    @Path("/profil/konum")
+    @RolesAllowed({"KULLANICI"})
+    public Response konumGuncelle(@Valid KonumGuncelleRequest request) {
+        try {
+            UUID userId = UUID.fromString(jwt.getSubject());
+            authService.konumGuncelle(userId, request);
+            return Response.ok(ApiResponse.basarili("Konum güncellendi")).build();
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(ApiResponse.hata("Konum güncellenirken hata: " + e.getMessage()))
+                    .build();
+        }
     }
 
     // ─── YARDIMCI ───────────────────────────────────────────────

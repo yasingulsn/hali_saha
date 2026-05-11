@@ -26,6 +26,13 @@ class SecureStorageService {
     ]);
   }
 
+  Future<void> saveKullaniciBilgi(KullaniciBilgi bilgi) async {
+    await _storage.write(
+      key: StorageKeys.kullaniciBilgi,
+      value: jsonEncode(bilgi.toJson()),
+    );
+  }
+
   Future<String?> getAccessToken() async {
     return await _storage.read(key: StorageKeys.accessToken);
   }
@@ -51,6 +58,28 @@ class SecureStorageService {
   Future<bool> hasTokens() async {
     final token = await getAccessToken();
     return token != null && token.isNotEmpty;
+  }
+
+  // ─── KONUM İŞLEMLERİ ──────────────────────────────────────
+
+  Future<void> saveKonum(String il, String ilce) async {
+    await _storage.write(
+      key: StorageKeys.seciliKonum,
+      value: '$il|$ilce',
+    );
+  }
+
+  /// Kaydedilen konumu [il, ilce] listesi olarak döner. Yoksa null.
+  Future<List<String>?> getKonum() async {
+    final val = await _storage.read(key: StorageKeys.seciliKonum);
+    if (val == null || val.isEmpty) return null;
+    final parts = val.split('|');
+    if (parts.length != 2) return null;
+    return parts;
+  }
+
+  Future<void> clearKonum() async {
+    await _storage.delete(key: StorageKeys.seciliKonum);
   }
 
   // ─── BENİ HATIRLA ──────────────────────────────────────────

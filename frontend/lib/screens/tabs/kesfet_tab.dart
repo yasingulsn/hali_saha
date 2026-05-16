@@ -1431,14 +1431,15 @@ class _KesfetTabState extends State<KesfetTab> {
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: AppTheme.backgroundDark),
             onPressed: () {
               if (controller.text.trim().isEmpty) return;
+              final mesaj = controller.text.trim();
               Navigator.pop(ctx);
-              _katilmaIstegiGonder(ilan.id, controller.text.trim());
+              _katilmaIstegiGonder(ilan.id, mesaj);
             },
             child: const Text('İstek Gönder'),
           ),
         ],
       ),
-    );
+    ).then((_) => controller.dispose());
   }
 
   Future<void> _katilmaIstegiGonder(String ilanId, String mesaj) async {

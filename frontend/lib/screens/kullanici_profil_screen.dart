@@ -272,7 +272,7 @@ class _KullaniciProfilScreenState extends State<KullaniciProfilScreen> {
           ],
         ),
       ),
-    );
+    ).then((_) => aciklamaCtrl.dispose());
   }
 
   String _tarihFormatla(String tarih) {

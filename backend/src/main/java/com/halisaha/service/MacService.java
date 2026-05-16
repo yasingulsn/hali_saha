@@ -314,6 +314,10 @@ public class MacService {
 
         if (puanlayanId.equals(hedefId)) throw new AuthException("Kendinize puan veremezsiniz", 400);
 
+        if (com.halisaha.entity.MacPuanlama.zatenPuanladi(macId, puanlayanId, hedefId)) {
+            throw new AuthException("Bu oyuncuyu zaten puanladınız", 409);
+        }
+
         // Hedef kullanıcının disiplin puanını güncelle (ağırlıklı ortalama)
         Kullanici kullanici = Kullanici.findById(hedefId);
         if (kullanici == null) throw new AuthException("Kullanıcı bulunamadı", 404);
@@ -326,6 +330,13 @@ public class MacService {
         kullanici.disiplinPuani = new java.math.BigDecimal(yeniPuan).setScale(2, java.math.RoundingMode.HALF_UP);
         kullanici.yorumSayisi = mevcutYorumSayisi + 1;
         kullanici.persist();
+
+        com.halisaha.entity.MacPuanlama kayit = new com.halisaha.entity.MacPuanlama();
+        kayit.macId = macId;
+        kayit.puanlayanId = puanlayanId;
+        kayit.hedefId = hedefId;
+        kayit.puan = puan;
+        kayit.persist();
 
         bildirimService.bildirimOlustur(
             hedefId,

@@ -162,6 +162,17 @@ class MacService {
     }
   }
 
+  Future<List<String>> puanlananOyuncular(String macId) async {
+    try {
+      final response = await _apiClient.dio.get('${ApiConstants.maclar}/$macId/puanlananlar');
+      final veri = response.data['veri'];
+      if (veri == null) return [];
+      return (veri as List).map((e) => e.toString()).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<ApiResponse<List<Mac>>> sahaMaclari(String sahaId) async {
     try {
       final response = await _apiClient.dio.get('${ApiConstants.maclar}/saha/$sahaId');

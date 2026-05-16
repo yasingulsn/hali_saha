@@ -24,6 +24,13 @@ public class ProfilResponse {
     public long toplamMacSayisi;       // Katıldığı maçlar
     public long olusturduguMacSayisi;  // Oluşturduğu maçlar
     public long toplamIlanSayisi;      // Oluşturduğu takım ilanları
+    public long sonOtuzGunMacSayisi;   // Son 30 günde oynanan maçlar
+    public long aldiguPuanSayisi;      // Kaç kez puanlandı
+    public String sonMacTarihi;        // Son oynadığı maç tarihi
+
+    // Takip istatistikleri
+    public long takipEdilenSayisi;
+    public long takipciSayisi;
 
     public ProfilResponse() {}
 }

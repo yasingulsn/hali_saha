@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/token_response.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_client.dart';
+import '../services/fotograf_service.dart';
 import '../services/profil_service.dart';
 import '../utils/theme.dart';
 
@@ -18,6 +20,7 @@ class ProfilDuzenleScreen extends StatefulWidget {
 
 class _ProfilDuzenleScreenState extends State<ProfilDuzenleScreen> {
   final ProfilService _profilService = ProfilService();
+  final FotografService _fotografService = FotografService(ApiClient());
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController _adSoyadCtrl;
@@ -408,6 +411,23 @@ class _ProfilDuzenleScreenState extends State<ProfilDuzenleScreen> {
 
     setState(() => _isLoading = true);
 
+    // Önce fotoğraf yükleme (varsa)
+    String? fotoUrl = _mevcutFotoUrl;
+    if (_secilenFoto != null) {
+      final fotoRes = await _fotografService.profilFotoYukle(_secilenFoto!);
+      if (fotoRes.basarili && fotoRes.veri != null) {
+        fotoUrl = fotoRes.veri;
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Fotoğraf yüklenemedi: ${fotoRes.mesaj}'),
+          backgroundColor: AppTheme.errorRed,
+          behavior: SnackBarBehavior.floating,
+        ));
+        setState(() => _isLoading = false);
+        return;
+      }
+    }
+
     final response = await _profilService.profilGuncelle(
       adSoyad: _adSoyadCtrl.text.trim(),
       telefon: _telefonCtrl.text.trim().isEmpty ? null : _telefonCtrl.text.trim(),
@@ -417,7 +437,7 @@ class _ProfilDuzenleScreenState extends State<ProfilDuzenleScreen> {
           : _dogumTarihiCtrl.text.trim(),
       il: widget.profilDetay?.il,
       ilce: widget.profilDetay?.ilce,
-      profilFotoUrl: _mevcutFotoUrl,
+      profilFotoUrl: fotoUrl,
     );
 
     if (mounted) {

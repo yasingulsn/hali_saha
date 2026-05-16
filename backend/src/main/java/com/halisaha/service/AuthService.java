@@ -256,6 +256,25 @@ public class AuthService {
         r.toplamMacSayisi = MacKatilimci.count("kullaniciId = ?1 AND katilimDurumu = 'ONAYLANDI'", kullaniciId);
         r.olusturduguMacSayisi = Mac.count("olusturanId", kullaniciId);
         r.toplamIlanSayisi = TakimIlani.count("olusturanId", kullaniciId);
+        r.aldiguPuanSayisi = k.yorumSayisi != null ? k.yorumSayisi : 0;
+
+        // Son 30 günde oynadığı maç sayısı
+        java.time.OffsetDateTime otuzGunOnce = java.time.OffsetDateTime.now().minusDays(30);
+        r.sonOtuzGunMacSayisi = MacKatilimci.count(
+            "kullaniciId = ?1 AND katilimDurumu = 'ONAYLANDI' AND katilimTarihi >= ?2",
+            kullaniciId, otuzGunOnce);
+
+        // Son maç tarihi
+        MacKatilimci sonKatilim = MacKatilimci.find(
+            "kullaniciId = ?1 AND katilimDurumu = 'ONAYLANDI' ORDER BY katilimTarihi DESC",
+            kullaniciId).firstResult();
+        if (sonKatilim != null && sonKatilim.katilimTarihi != null) {
+            r.sonMacTarihi = sonKatilim.katilimTarihi.toString();
+        }
+
+        // Takip istatistikleri
+        r.takipEdilenSayisi = Takip.takipEdilenSayisi(kullaniciId);
+        r.takipciSayisi = Takip.takipciSayisi(kullaniciId);
 
         return r;
     }

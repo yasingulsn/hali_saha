@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/token_response.dart';
 import '../services/auth_service.dart';
+import '../services/fcm_service.dart';
 import '../services/profil_service.dart';
 
 enum AuthState { initial, loading, authenticated, unauthenticated, error }
@@ -185,6 +186,7 @@ class AuthProvider extends ChangeNotifier {
   // ─── ÇIKIŞ ────────────────────────────────────────────────────
 
   Future<void> cikis() async {
+    await FcmService().tokenSil();
     await _authService.cikis();
     _currentUser = null;
     _kullaniciTipi = null;

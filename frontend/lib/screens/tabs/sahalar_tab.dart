@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../models/saha.dart';
 import '../../services/api_client.dart';
 import '../../services/saha_service.dart';
@@ -20,12 +22,14 @@ class _SahalarTabState extends State<SahalarTab> {
   bool _yukleniyor = true;
   String? _hata;
   int _seciliFiltre = 0;
+  bool _haritaGorunumu = false;
 
   final _filtreler = ['Tümü', 'Kapalı', 'Açık', 'En Ucuz', 'En Pahalı'];
 
   @override
   void initState() {
     super.initState();
+    _aramaController.addListener(() => setState(() {}));
     _sahalariYukle();
   }
 
@@ -49,7 +53,7 @@ class _SahalarTabState extends State<SahalarTab> {
       _sahalariYukle();
       return;
     }
-    setState(() { _yukleniyor = true; });
+    setState(() { _yukleniyor = true; _hata = null; });
     final response = await _sahaService.sahalarAra(query.trim());
     if (mounted) {
       setState(() {
@@ -74,6 +78,15 @@ class _SahalarTabState extends State<SahalarTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (_haritaGorunumu) {
+      return Column(
+        children: [
+          _buildSearchBar(),
+          _buildFilters(),
+          Expanded(child: _buildHaritaGorunumu()),
+        ],
+      );
+    }
     return RefreshIndicator(
       onRefresh: _sahalariYukle,
       color: AppTheme.primaryGreen,
@@ -107,46 +120,243 @@ class _SahalarTabState extends State<SahalarTab> {
     );
   }
 
+  Widget _buildHaritaGorunumu() {
+    final sahalarKonum = _filtrelenmis.where((s) => s.enlem != null && s.boylam != null).toList();
+    final center = sahalarKonum.isNotEmpty
+        ? LatLng(
+            sahalarKonum.map((s) => s.enlem!).reduce((a, b) => a + b) / sahalarKonum.length,
+            sahalarKonum.map((s) => s.boylam!).reduce((a, b) => a + b) / sahalarKonum.length,
+          )
+        : const LatLng(41.0082, 28.9784);
+
+    if (_yukleniyor) {
+      return const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen));
+    }
+
+    return RefreshIndicator(
+      onRefresh: _sahalariYukle,
+      color: AppTheme.primaryGreen,
+      child: Stack(
+      children: [
+        FlutterMap(
+          options: MapOptions(
+            initialCenter: center,
+            initialZoom: sahalarKonum.isEmpty ? 10 : 12,
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.example.halisaha_app',
+            ),
+            MarkerLayer(
+              markers: sahalarKonum.map((saha) {
+                return Marker(
+                  point: LatLng(saha.enlem!, saha.boylam!),
+                  width: 48,
+                  height: 46,
+                  child: GestureDetector(
+                    onTap: () => _sahaMarkerTiklandi(saha),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            gradient: AppTheme.primaryGradient,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primaryGreen.withOpacity(0.4),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.stadium_rounded, color: Colors.white, size: 18),
+                        ),
+                        const SizedBox(height: 2),
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.primaryGreen,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+        if (sahalarKonum.isEmpty)
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.cardDark.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Konumu olan saha bulunamadı',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            ),
+          ),
+      ],
+    ));
+  }
+
+  void _sahaMarkerTiklandi(Saha saha) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.primaryGreen.withOpacity(0.1)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.stadium_rounded, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(saha.sahaAdi,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text(saha.adres,
+                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.7)),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ])),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryGreen.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(saha.sahaFormati,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.primaryGreen)),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            Row(children: [
+              const Icon(Icons.star_rounded, color: AppTheme.amber, size: 16),
+              const SizedBox(width: 4),
+              Text(saha.puanOrtalamasi.toStringAsFixed(1),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              Text('  (${saha.yorumSayisi} yorum)',
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+              const Spacer(),
+              Text('₺${saha.saatlikUcret.toStringAsFixed(0)}/saat',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.primaryGreen)),
+            ]),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => SahaDetayScreen(sahaId: saha.id)));
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.buttonGradient,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Center(
+                  child: Text('Detaya Git',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.backgroundDark)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-      child: Container(
-        height: 52,
-        decoration: BoxDecoration(
-          color: AppTheme.cardDark,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.primaryGreen.withOpacity(0.08)),
-        ),
-        child: Row(
-          children: [
-            const SizedBox(width: 16),
-            Icon(Icons.search_rounded, color: AppTheme.textSecondary.withOpacity(0.6), size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _aramaController,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-                decoration: const InputDecoration(
-                  hintText: 'Saha ara...',
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                  isDense: true,
-                ),
-                onSubmitted: _ara,
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppTheme.cardDark,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.primaryGreen.withOpacity(0.08)),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 16),
+                  Icon(Icons.search_rounded, color: AppTheme.textSecondary.withOpacity(0.6), size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _aramaController,
+                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                      decoration: const InputDecoration(
+                        hintText: 'Saha ara...',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        isDense: true,
+                      ),
+                      onSubmitted: _ara,
+                    ),
+                  ),
+                  if (_aramaController.text.isNotEmpty)
+                    GestureDetector(
+                      onTap: () { _aramaController.clear(); _sahalariYukle(); },
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Icon(Icons.close_rounded, color: AppTheme.textSecondary.withOpacity(0.6), size: 20),
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (_aramaController.text.isNotEmpty)
-              GestureDetector(
-                onTap: () { _aramaController.clear(); _sahalariYukle(); },
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Icon(Icons.close_rounded, color: AppTheme.textSecondary.withOpacity(0.6), size: 20),
-                ),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: () => setState(() => _haritaGorunumu = !_haritaGorunumu),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: _haritaGorunumu ? AppTheme.primaryGreen : AppTheme.cardDark,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.primaryGreen.withOpacity(0.2)),
               ),
-          ],
-        ),
+              child: Icon(
+                _haritaGorunumu ? Icons.list_rounded : Icons.map_rounded,
+                color: _haritaGorunumu ? AppTheme.backgroundDark : AppTheme.primaryGreen,
+                size: 22,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -216,13 +426,36 @@ class _SahalarTabState extends State<SahalarTab> {
   }
 
   Widget _buildBos() {
+    final aramaVar = _aramaController.text.trim().isNotEmpty;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.stadium_outlined, color: AppTheme.textSecondary.withOpacity(0.3), size: 64),
           const SizedBox(height: 16),
-          const Text('Henüz saha bulunamadı', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
+          Text(
+            aramaVar
+                ? '"${_aramaController.text.trim()}" için sonuç bulunamadı'
+                : 'Henüz saha bulunamadı',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 15),
+            textAlign: TextAlign.center,
+          ),
+          if (aramaVar) ...[
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () { _aramaController.clear(); _sahalariYukle(); },
+              child: Text(
+                'Aramayı temizle',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.primaryGreen,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                  decorationColor: AppTheme.primaryGreen,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -247,7 +480,19 @@ class _SahalarTabState extends State<SahalarTab> {
                 gradient: AppTheme.glassGradient,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(Icons.stadium_rounded, color: AppTheme.primaryGreen, size: 28),
+              child: saha.fotografUrl != null && saha.fotografUrl!.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        saha.fotografUrl!,
+                        fit: BoxFit.cover,
+                        width: 64,
+                        height: 64,
+                        errorBuilder: (_, __, ___) =>
+                            const Icon(Icons.stadium_rounded, color: AppTheme.primaryGreen, size: 28),
+                      ),
+                    )
+                  : const Icon(Icons.stadium_rounded, color: AppTheme.primaryGreen, size: 28),
             ),
             const SizedBox(width: 14),
             Expanded(

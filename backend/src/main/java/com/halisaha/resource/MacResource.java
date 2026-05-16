@@ -129,6 +129,15 @@ public class MacResource {
         return Response.ok(ApiResponse.basarili("Oyuncu puanlandı")).build();
     }
 
+    @GET
+    @Path("/{id}/puanlananlar")
+    @RolesAllowed("KULLANICI")
+    public Response puanlananlar(@PathParam("id") UUID macId) {
+        UUID kullaniciId = UUID.fromString(jwt.getSubject());
+        List<UUID> idler = com.halisaha.entity.MacPuanlama.puanlananIdler(macId, kullaniciId);
+        return Response.ok(ApiResponse.basarili("Puanlananlar", idler)).build();
+    }
+
     @POST
     @Path("/{id}/skor")
     @RolesAllowed("KULLANICI")

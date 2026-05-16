@@ -18,6 +18,8 @@ class BildirimlerScreen extends StatefulWidget {
 }
 
 class _BildirimlerScreenState extends State<BildirimlerScreen> {
+  final _takimIlaniService = TakimIlaniService(ApiClient());
+
   @override
   void initState() {
     super.initState();
@@ -156,9 +158,7 @@ class _BildirimlerScreenState extends State<BildirimlerScreen> {
   }
 
   Future<void> _showTakimIlaniDetay(String id) async {
-    // Önce ilanı yükle
-    final service = TakimIlaniService(ApiClient());
-    final res = await service.ilanDetay(id);
+    final res = await _takimIlaniService.ilanDetay(id);
     
     if (!mounted) return;
 

@@ -45,7 +45,12 @@ class KullaniciBilgi {
   final int toplamMacSayisi;
   final int olusturduguMacSayisi;
   final int toplamIlanSayisi;
+  final int sonOtuzGunMacSayisi;
+  final int aldiguPuanSayisi;
+  final String? sonMacTarihi;
   final bool? emailDogrulanmis;
+  final int takipEdilenSayisi;
+  final int takipciSayisi;
 
   KullaniciBilgi({
     required this.id,
@@ -65,7 +70,12 @@ class KullaniciBilgi {
     this.toplamMacSayisi = 0,
     this.olusturduguMacSayisi = 0,
     this.toplamIlanSayisi = 0,
+    this.sonOtuzGunMacSayisi = 0,
+    this.aldiguPuanSayisi = 0,
+    this.sonMacTarihi,
     this.emailDogrulanmis,
+    this.takipEdilenSayisi = 0,
+    this.takipciSayisi = 0,
   });
 
   factory KullaniciBilgi.fromJson(Map<String, dynamic> json) {
@@ -91,7 +101,12 @@ class KullaniciBilgi {
       toplamMacSayisi: json['toplamMacSayisi'] ?? 0,
       olusturduguMacSayisi: json['olusturduguMacSayisi'] ?? 0,
       toplamIlanSayisi: json['toplamIlanSayisi'] ?? 0,
+      sonOtuzGunMacSayisi: json['sonOtuzGunMacSayisi'] ?? 0,
+      aldiguPuanSayisi: json['aldiguPuanSayisi'] ?? 0,
+      sonMacTarihi: json['sonMacTarihi'],
       emailDogrulanmis: json['emailDogrulanmis'],
+      takipEdilenSayisi: json['takipEdilenSayisi'] ?? 0,
+      takipciSayisi: json['takipciSayisi'] ?? 0,
     );
   }
 
@@ -114,6 +129,11 @@ class KullaniciBilgi {
       'toplamMacSayisi': toplamMacSayisi,
       'olusturduguMacSayisi': olusturduguMacSayisi,
       'toplamIlanSayisi': toplamIlanSayisi,
+      'sonOtuzGunMacSayisi': sonOtuzGunMacSayisi,
+      'aldiguPuanSayisi': aldiguPuanSayisi,
+      'sonMacTarihi': sonMacTarihi,
+      'takipEdilenSayisi': takipEdilenSayisi,
+      'takipciSayisi': takipciSayisi,
     };
   }
 }

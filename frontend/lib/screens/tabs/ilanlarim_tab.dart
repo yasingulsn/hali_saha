@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/mac.dart';
 import '../../models/takim_ilani.dart';
 import '../../models/token_response.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/mac_service.dart';
 import '../../services/takim_ilani_service.dart';
@@ -25,6 +27,7 @@ class _IlanlarimTabState extends State<IlanlarimTab> with TickerProviderStateMix
   List<Mac> _rakipIlanlari = [];
   List<Mac> _eksikOyuncuIlanlari = [];
   bool _isLoading = true;
+  String? _hata;
 
   late TabController _tabController;
 
@@ -42,27 +45,30 @@ class _IlanlarimTabState extends State<IlanlarimTab> with TickerProviderStateMix
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    
-    final results = await Future.wait([
-      _takimIlaniService.benimIlanlarim(),
-      _macService.benimMaclarim(),
-    ]);
+    setState(() { _isLoading = true; _hata = null; });
 
-    if (mounted) {
-      final ilanRes = results[0] as ApiResponse<List<TakimIlani>>;
-      final macRes = results[1] as ApiResponse<List<Mac>>;
+    try {
+      final ilanFuture = _takimIlaniService.benimIlanlarim();
+      final macFuture = _macService.benimMaclarim();
+      final ilanRes = await ilanFuture;
+      final macRes = await macFuture;
 
-      setState(() {
-        _isLoading = false;
-        if (ilanRes.basarili && ilanRes.veri != null) {
-          _kaliciOyuncuIlanlari = ilanRes.veri!;
-        }
-        if (macRes.basarili && macRes.veri != null) {
-          _rakipIlanlari = macRes.veri!.where((m) => m.macTipi == 'RAKIP_ARANIYOR').toList();
-          _eksikOyuncuIlanlari = macRes.veri!.where((m) => m.macTipi == 'EKSIK_OYUNCU').toList();
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (ilanRes.basarili && ilanRes.veri != null) {
+            _kaliciOyuncuIlanlari = ilanRes.veri!;
+          }
+          if (macRes.basarili && macRes.veri != null) {
+            _rakipIlanlari = macRes.veri!.where((m) => m.macTipi == 'RAKIP_ARANIYOR').toList();
+            _eksikOyuncuIlanlari = macRes.veri!.where((m) => m.macTipi == 'EKSIK_OYUNCU').toList();
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() { _isLoading = false; _hata = 'Veriler yüklenemedi. Yenilemek için çekin.'; });
+      }
     }
   }
 
@@ -75,16 +81,18 @@ class _IlanlarimTabState extends State<IlanlarimTab> with TickerProviderStateMix
           _buildHeader(),
           _buildTabBar(),
           Expanded(
-            child: _isLoading 
-              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen))
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildIlanList(_kaliciOyuncuIlanlari, 'kalici'),
-                    _buildIlanList(_rakipIlanlari, 'rakip'),
-                    _buildIlanList(_eksikOyuncuIlanlari, 'eksik'),
-                  ],
-                ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen))
+                : _hata != null
+                    ? _buildHata()
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildIlanList(_kaliciOyuncuIlanlari, 'kalici'),
+                          _buildIlanList(_rakipIlanlari, 'rakip'),
+                          _buildIlanList(_eksikOyuncuIlanlari, 'eksik'),
+                        ],
+                      ),
           ),
         ],
       ),
@@ -168,54 +176,84 @@ class _IlanlarimTabState extends State<IlanlarimTab> with TickerProviderStateMix
     );
   }
 
-  Widget _buildIlanList(List<dynamic> items, String type) {
-    if (items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.campaign_outlined,
-              size: 64,
-              color: AppTheme.textSecondary.withOpacity(0.1),
+  Widget _buildHata() {
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      color: AppTheme.primaryGreen,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: 400,
+            child: Center(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.wifi_off_rounded, color: AppTheme.lightOrange.withOpacity(0.5), size: 48),
+                const SizedBox(height: 16),
+                Text(_hata!, textAlign: TextAlign.center,
+                    style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.7), fontSize: 14)),
+              ]),
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Henüz ilanınız yok',
-              style: TextStyle(
-                color: AppTheme.textSecondary.withOpacity(0.5),
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+          ),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildIlanList(List<dynamic> items, String type) {
     return RefreshIndicator(
       onRefresh: _loadData,
       color: AppTheme.primaryGreen,
       backgroundColor: AppTheme.cardDark,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-        physics: const BouncingScrollPhysics(),
-        itemCount: items.length,
-        itemBuilder: (context, index) {
-          final item = items[index];
-          if (type == 'kalici') {
-            return _buildKaliciIlanCard(item as TakimIlani);
-          } else {
-            return _buildMacIlanCard(item as Mac);
-          }
-        },
-      ),
+      child: items.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                SizedBox(
+                  height: 400,
+                  child: Center(
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(Icons.campaign_outlined, size: 64,
+                          color: AppTheme.textSecondary.withOpacity(0.1)),
+                      const SizedBox(height: 16),
+                      Text('Henüz ilanınız yok',
+                          style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5),
+                              fontSize: 15, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
+              ],
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                if (type == 'kalici') {
+                  return _buildKaliciIlanCard(item as TakimIlani);
+                } else {
+                  return _buildMacIlanCard(item as Mac);
+                }
+              },
+            ),
     );
   }
 
   Widget _buildKaliciIlanCard(TakimIlani ilan) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TakimIlanlariScreen())),
+      onTap: () {
+        final userId = context.read<AuthProvider>().currentUser?.id;
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => TakimIlaniDetaySheet(
+            ilan: ilan,
+            benimMi: ilan.olusturanId == userId,
+            onDegisti: _loadData,
+          ),
+        );
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),

@@ -167,7 +167,15 @@ public class TakimIlaniService {
 
     public List<com.halisaha.dto.TakimIlaniIstekResponse> gelenIstekler(UUID kullaniciId) {
         List<com.halisaha.entity.TakimIlaniIstek> istekler = com.halisaha.entity.TakimIlaniIstek.find(
-            "SELECT i FROM TakimIlaniIstek i JOIN i.ilan ilan WHERE ilan.olusturanId = ?1 AND i.durum = 'BEKLEMEDE' ORDER BY i.olusturulmaTarihi DESC", 
+            "SELECT i FROM TakimIlaniIstek i JOIN i.ilan ilan WHERE ilan.olusturanId = ?1 AND i.durum = 'BEKLEMEDE' ORDER BY i.olusturulmaTarihi DESC",
+            kullaniciId
+        ).list();
+        return istekler.stream().map(com.halisaha.dto.TakimIlaniIstekResponse::fromEntity).collect(Collectors.toList());
+    }
+
+    public List<com.halisaha.dto.TakimIlaniIstekResponse> gonderdigimIstekler(UUID kullaniciId) {
+        List<com.halisaha.entity.TakimIlaniIstek> istekler = com.halisaha.entity.TakimIlaniIstek.find(
+            "SELECT i FROM TakimIlaniIstek i JOIN FETCH i.ilan WHERE i.gonderenId = ?1 ORDER BY i.olusturulmaTarihi DESC",
             kullaniciId
         ).list();
         return istekler.stream().map(com.halisaha.dto.TakimIlaniIstekResponse::fromEntity).collect(Collectors.toList());

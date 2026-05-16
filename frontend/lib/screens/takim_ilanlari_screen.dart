@@ -50,10 +50,12 @@ class _TakimIlanlariScreenState extends State<TakimIlanlariScreen> {
 
   Future<void> _yukle() async {
     setState(() => _yukleniyor = true);
-    final tumRes = await _service.aktifIlanlar();
+    final tumFuture = _service.aktifIlanlar();
+    final benimFuture = _service.benimIlanlarim();
+    final tumRes = await tumFuture;
     List<TakimIlani> benim = [];
     try {
-      final benimRes = await _service.benimIlanlarim();
+      final benimRes = await benimFuture;
       if (benimRes.basarili && benimRes.veri != null) benim = benimRes.veri!;
     } catch (_) {}
     if (mounted) {
@@ -171,7 +173,11 @@ class _TakimIlanlariScreenState extends State<TakimIlanlariScreen> {
     final sel = _seciliTab == index;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _seciliTab = index),
+        onTap: () => setState(() {
+        _seciliTab = index;
+        _filtrePozisyon = null;
+        _filtreSeviye = null;
+      }),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(gradient: sel ? AppTheme.buttonGradient : null, borderRadius: BorderRadius.circular(10)),
@@ -268,11 +274,11 @@ class _TakimIlanlariScreenState extends State<TakimIlanlariScreen> {
       physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 100),
       itemCount: ilanlar.length,
-      itemBuilder: (context, index) => _buildIlanCard(ilanlar[index]),
+      itemBuilder: (context, index) => _buildIlanCard(ilanlar[index], benimMi: _seciliTab == 1),
     );
   }
 
-  Widget _buildIlanCard(TakimIlani ilan) {
+  Widget _buildIlanCard(TakimIlani ilan, {bool benimMi = false}) {
     return GestureDetector(
       onTap: () => _showIlanDetay(ilan),
       child: Container(
@@ -326,7 +332,7 @@ class _TakimIlanlariScreenState extends State<TakimIlanlariScreen> {
                 Text(ilan.olusturanAdi!, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
               ]),
             ],
-            if (_seciliTab == 1) ...[
+            if (benimMi) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -454,7 +460,10 @@ class TakimIlaniDetaySheet extends StatelessWidget {
   final TakimIlani ilan;
   final bool benimMi;
   final VoidCallback onDegisti;
-  const TakimIlaniDetaySheet({required this.ilan, required this.benimMi, required this.onDegisti});
+
+  static final _service = TakimIlaniService(ApiClient());
+
+  const TakimIlaniDetaySheet({super.key, required this.ilan, required this.benimMi, required this.onDegisti});
 
   @override
   Widget build(BuildContext context) {
@@ -603,10 +612,15 @@ class TakimIlaniDetaySheet extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: AppTheme.backgroundDark),
             onPressed: () async {
-              if (controller.text.trim().isEmpty) return;
+              if (controller.text.trim().isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                  content: Text('Lütfen bir mesaj veya iletişim bilgisi girin'),
+                  behavior: SnackBarBehavior.floating,
+                ));
+                return;
+              }
               Navigator.pop(ctx);
-              final service = TakimIlaniService(ApiClient());
-              final res = await service.katilmaIstegiGonder(ilan.id, controller.text.trim());
+              final res = await _service.katilmaIstegiGonder(ilan.id, controller.text.trim());
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(res.mesaj),
@@ -648,8 +662,7 @@ class TakimIlaniDetaySheet extends StatelessWidget {
     );
 
     if (onay != true || !context.mounted) return;
-    final service = TakimIlaniService(ApiClient());
-    final res = await service.ilanSil(ilan.id);
+    final res = await _service.ilanSil(ilan.id);
     if (!context.mounted) return;
 
     if (res.basarili) {

@@ -90,6 +90,19 @@ class TakimIlaniService {
     }
   }
 
+  Future<ApiResponse<List<TakimIlaniIstek>>> gonderdigimIstekler() async {
+    try {
+      final response = await _apiClient.dio.get('$_basePath/gonderdigim-istekler');
+      final data = response.data;
+      final list = data['veri'] != null
+          ? (data['veri'] as List).map((e) => TakimIlaniIstek.fromJson(e)).toList()
+          : <TakimIlaniIstek>[];
+      return ApiResponse(basarili: data['basarili'] ?? false, mesaj: data['mesaj'] ?? '', veri: list);
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
   Future<ApiResponse<List<TakimIlaniIstek>>> gelenIstekler() async {
     try {
       final response = await _apiClient.dio.get('$_basePath/gelen-istekler');

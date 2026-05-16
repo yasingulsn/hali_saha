@@ -3,12 +3,16 @@ package com.halisaha.service;
 import com.halisaha.entity.Bildirim;
 import com.halisaha.entity.Kullanici;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.UUID;
 
 @ApplicationScoped
 public class BildirimService {
+
+    @Inject
+    FcmService fcmService;
 
     @Transactional
     public void bildirimOlustur(UUID aliciId, String baslik, String mesaj, String bildirimTipi, String hedefId, String aksiyonId) {
@@ -20,6 +24,9 @@ public class BildirimService {
         bildirim.hedefId = hedefId;
         bildirim.aksiyonId = aksiyonId;
         bildirim.persist();
+
+        // FCM push notification (servis hesabı varsa)
+        fcmService.pushGonder(aliciId, baslik, mesaj, bildirimTipi, hedefId);
     }
 
     @Transactional

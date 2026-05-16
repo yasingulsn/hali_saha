@@ -118,6 +118,15 @@ public class TakimIlaniResource {
         return Response.ok(ApiResponse.basarili("Gelen istekler listelendi", istekler)).build();
     }
 
+    @GET
+    @Path("/gonderdigim-istekler")
+    @RolesAllowed("KULLANICI")
+    public Response gonderdigimIstekler() {
+        UUID kullaniciId = UUID.fromString(jwt.getSubject());
+        List<com.halisaha.dto.TakimIlaniIstekResponse> istekler = takimIlaniService.gonderdigimIstekler(kullaniciId);
+        return Response.ok(ApiResponse.basarili("Gönderilen istekler listelendi", istekler)).build();
+    }
+
     @POST
     @Path("/istek/{id}/onayla")
     @RolesAllowed("KULLANICI")

@@ -13,6 +13,8 @@ import '../profil_duzenle_screen.dart';
 import '../takim_istekleri_screen.dart';
 import '../../providers/tema_provider.dart';
 import '../takvim_screen.dart';
+import '../istatistik_screen.dart';
+import '../takip_liste_screen.dart';
 
 class ProfilTab extends StatefulWidget {
   const ProfilTab({super.key});
@@ -78,20 +80,17 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
         _isLoading = false;
         if (response.basarili && response.veri != null) {
           _profilDetay = response.veri;
-          _headerAnimCtrl.forward();
-          Future.delayed(const Duration(milliseconds: 300), () {
-            if (mounted) _statsAnimCtrl.forward();
-          });
         } else {
           _hata = response.mesaj;
-          // Hata olsa bile local kullanıcı bilgisini göster
           final auth = Provider.of<AuthProvider>(context, listen: false);
           _profilDetay = auth.currentUser;
-          _headerAnimCtrl.forward();
-          Future.delayed(const Duration(milliseconds: 300), () {
-            if (mounted) _statsAnimCtrl.forward();
-          });
         }
+      });
+      _headerAnimCtrl.reset();
+      _statsAnimCtrl.reset();
+      _headerAnimCtrl.forward();
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _statsAnimCtrl.forward();
       });
     }
   }
@@ -151,13 +150,21 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
                   child: _buildProfileHeader(user, isIsletme),
                 ),
               ),
-              SliverToBoxAdapter(
-                child: FadeTransition(
-                  opacity: _statsFadeIn,
-                  child: _buildStatsCards(user),
-                ),
-              ),
               if (!isIsletme)
+                SliverToBoxAdapter(
+                  child: FadeTransition(
+                    opacity: _statsFadeIn,
+                    child: _buildStatsCards(user),
+                  ),
+                ),
+              if (!isIsletme)
+                SliverToBoxAdapter(
+                  child: FadeTransition(
+                    opacity: _statsFadeIn,
+                    child: _buildTakipSatiri(user),
+                  ),
+                ),
+            if (!isIsletme)
                 SliverToBoxAdapter(
                   child: FadeTransition(
                     opacity: _statsFadeIn,
@@ -231,17 +238,30 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
                 ),
               ],
             ),
-            child: Center(
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 2,
-                ),
-              ),
-            ),
+            child: user?.profilFotoUrl != null && user!.profilFotoUrl!.isNotEmpty
+                ? ClipOval(
+                    child: Image.network(
+                      user.profilFotoUrl!,
+                      fit: BoxFit.cover,
+                      width: 96,
+                      height: 96,
+                      errorBuilder: (_, __, ___) => Center(
+                        child: Text(initials,
+                            style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 2)),
+                      ),
+                    ),
+                  )
+                : Center(
+                    child: Text(
+                      initials,
+                      style: const TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
           ),
           const SizedBox(height: 16),
 
@@ -285,12 +305,6 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
                   label: _pozisyonAdi(user.tercihEdilenPozisyon!),
                   color: AppTheme.lightOrange,
                 ),
-              if (user?.disiplinPuani != null)
-                _buildBadge(
-                  icon: Icons.stars_rounded,
-                  label: 'Disiplin: ${user!.disiplinPuani!.toStringAsFixed(1)}',
-                  color: _disiplinRengi(user.disiplinPuani!),
-                ),
             ],
           ),
         ],
@@ -301,9 +315,13 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
   // ─── İSTATİSTİK KARTLARI ─────────────────────────────────────
 
   Widget _buildStatsCards(KullaniciBilgi? user) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-      child: Row(
+    return GestureDetector(
+      onTap: user != null
+          ? () => Navigator.push(context, MaterialPageRoute(builder: (_) => IstatistikScreen(user: user)))
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+        child: Row(
         children: [
           Expanded(
             child: _buildStatCard(
@@ -335,6 +353,7 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -392,6 +411,55 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTakipSatiri(KullaniciBilgi? user) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+      child: Row(children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TakipListeScreen(baslangicTab: 0))),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: AppTheme.cardDark,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.accentBlue.withOpacity(0.1)),
+              ),
+              child: Column(children: [
+                Text('${user?.takipEdilenSayisi ?? 0}',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppTheme.accentBlue)),
+                const SizedBox(height: 2),
+                Text('Takip Edilen',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withOpacity(0.7))),
+              ]),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TakipListeScreen(baslangicTab: 1))),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: AppTheme.cardDark,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.accentPurple.withOpacity(0.1)),
+              ),
+              child: Column(children: [
+                Text('${user?.takipciSayisi ?? 0}',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppTheme.accentPurple)),
+                const SizedBox(height: 2),
+                Text('Takipçi',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withOpacity(0.7))),
+              ]),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 
@@ -454,8 +522,23 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
               'Kayıt Tarihi',
               _formatKayitTarihi(user?.kayitTarihi),
               AppTheme.lightGreen,
-              isLast: true,
             ),
+            if (user?.il != null || user?.ilce != null)
+              _buildDetailRow(
+                Icons.location_on_rounded,
+                'Konum',
+                [user?.ilce, user?.il].where((e) => e != null && e.isNotEmpty).join(', '),
+                AppTheme.accentPurple,
+                isLast: true,
+              )
+            else
+              _buildDetailRow(
+                Icons.location_on_rounded,
+                'Konum',
+                'Belirtilmemiş',
+                AppTheme.accentPurple,
+                isLast: true,
+              ),
           ],
         ),
       ),
@@ -611,6 +694,27 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
               color: AppTheme.primaryGreen,
               onTap: () => _navigateToProfilDuzenle(context),
             ),
+            if (!isIsletme) ...[
+              _buildMenuDivider(),
+              _buildMenuItem(
+                icon: Icons.bar_chart_rounded,
+                label: 'İstatistiklerim',
+                color: AppTheme.accentPurple,
+                onTap: () {
+                  final user = _profilDetay;
+                  if (user != null) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => IstatistikScreen(user: user)));
+                  }
+                },
+              ),
+              _buildMenuDivider(),
+              _buildMenuItem(
+                icon: Icons.people_rounded,
+                label: 'Takip & Takipçiler',
+                color: AppTheme.accentBlue,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TakipListeScreen())),
+              ),
+            ],
             if (isIsletme) ...[
               _buildMenuDivider(),
               _buildMenuItem(
@@ -623,11 +727,9 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
             _buildMenuDivider(),
             _buildMenuItem(
               icon: Icons.handshake_rounded,
-              label: 'Gelen İstekler',
+              label: 'Takım İstekleri',
               color: AppTheme.accentBlue,
-              onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const TakimIstekleriScreen()));
-              },
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TakimIstekleriScreen())),
             ),
             _buildMenuDivider(),
             _buildMenuItem(
@@ -1053,6 +1155,8 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
     );
 
     if (result == true && mounted) {
+      _headerAnimCtrl.reset();
+      _statsAnimCtrl.reset();
       _loadProfil();
     }
   }

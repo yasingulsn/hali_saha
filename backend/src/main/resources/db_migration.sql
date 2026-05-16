@@ -29,6 +29,49 @@ CREATE TABLE IF NOT EXISTS takim_ilani_tb (
     olusturulma_tarihi TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- FCM Token tablosu (push notification)
+CREATE TABLE IF NOT EXISTS fcm_token_tb (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    kullanici_id UUID NOT NULL,
+    token VARCHAR(500) NOT NULL,
+    platform VARCHAR(20) DEFAULT 'android',
+    guncelleme_tarihi TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(kullanici_id, platform)
+);
+
+-- Maç Puanlama tablosu (duplicate rating önleme)
+CREATE TABLE IF NOT EXISTS mac_puanlama_tb (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mac_id UUID NOT NULL,
+    puanlayan_id UUID NOT NULL,
+    hedef_id UUID NOT NULL,
+    puan INTEGER NOT NULL,
+    tarih TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(mac_id, puanlayan_id, hedef_id)
+);
+
+-- Takım İlanı İstek tablosu
+CREATE TABLE IF NOT EXISTS takim_ilani_istek_tb (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ilan_id UUID NOT NULL,
+    gonderen_id UUID NOT NULL,
+    mesaj VARCHAR(500),
+    durum VARCHAR(20) DEFAULT 'BEKLEMEDE',
+    olusturulma_tarihi TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Kullanıcı yorum_sayisi kolonu
+ALTER TABLE kullanici_tb ADD COLUMN IF NOT EXISTS yorum_sayisi INTEGER DEFAULT 0;
+
+-- Takip tablosu
+CREATE TABLE IF NOT EXISTS takip_tb (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    takipci_id UUID NOT NULL,
+    takip_edilen_id UUID NOT NULL,
+    takip_tarihi TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(takipci_id, takip_edilen_id)
+);
+
 -- İndeksler
 CREATE INDEX IF NOT EXISTS idx_hali_saha_isletme ON hali_saha_tb(isletme_id);
 CREATE INDEX IF NOT EXISTS idx_hali_saha_aktif ON hali_saha_tb(aktif_mi);

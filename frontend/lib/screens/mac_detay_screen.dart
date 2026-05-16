@@ -6,6 +6,7 @@ import '../models/mac.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/mac_service.dart';
+import '../services/takip_service.dart';
 import '../utils/theme.dart';
 import 'kullanici_profil_screen.dart';
 
@@ -19,10 +20,13 @@ class MacDetayScreen extends StatefulWidget {
 
 class _MacDetayScreenState extends State<MacDetayScreen> {
   final MacService _macService = MacService(ApiClient());
+  final TakipService _takipService = TakipService();
   Mac? _mac;
   bool _yukleniyor = true;
   bool _islemYapiliyor = false;
   Timer? _yenilemeTicker;
+  Set<String> _puanlananlar = {};
+  Set<String> _takipEttiklerim = {};
 
   @override
   void initState() {
@@ -41,12 +45,27 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
 
   Future<void> _yukle({bool sessiz = false}) async {
     if (!sessiz) setState(() => _yukleniyor = true);
-    final res = await _macService.macDetay(widget.macId);
-    if (mounted) {
-      setState(() {
-        _yukleniyor = false;
-        if (res.basarili) _mac = res.veri;
-      });
+    try {
+      final results = await Future.wait([
+        _macService.macDetay(widget.macId),
+        _macService.puanlananOyuncular(widget.macId),
+        _takipService.takipEttiklerim(),
+      ]);
+      if (mounted) {
+        final macRes = results[0] as dynamic;
+        final puanRes = results[1] as List<String>;
+        final takipRes = results[2] as dynamic;
+        setState(() {
+          _yukleniyor = false;
+          if (macRes.basarili) _mac = macRes.veri;
+          _puanlananlar = puanRes.toSet();
+          if (takipRes.basarili && takipRes.veri != null) {
+            _takipEttiklerim = (takipRes.veri as List).map((p) => p.id as String).toSet();
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _yukleniyor = false);
     }
   }
 
@@ -96,6 +115,29 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
         '${m.sahaAdi != null ? '🏟 ${m.sahaAdi}\n' : ''}'
         '\nHali Saha uygulaması üzerinden maça katıl!';
     Share.share(text);
+  }
+
+  Future<void> _takipToggle(String kullaniciId) async {
+    final takipEdiyor = _takipEttiklerim.contains(kullaniciId);
+    setState(() {
+      if (takipEdiyor) {
+        _takipEttiklerim.remove(kullaniciId);
+      } else {
+        _takipEttiklerim.add(kullaniciId);
+      }
+    });
+    final ok = takipEdiyor
+        ? await _takipService.takiptenCik(kullaniciId)
+        : await _takipService.takipEt(kullaniciId);
+    if (!ok && mounted) {
+      setState(() {
+        if (takipEdiyor) {
+          _takipEttiklerim.add(kullaniciId);
+        } else {
+          _takipEttiklerim.remove(kullaniciId);
+        }
+      });
+    }
   }
 
   void _puanlaDialog(KatilimciBilgi katilimci) {
@@ -159,6 +201,9 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
                       if (!ctx.mounted) return;
                       Navigator.pop(ctx);
                       _showSnackbar(res.mesaj, res.basarili ? AppTheme.primaryGreen : AppTheme.errorRed);
+                      if (res.basarili && mounted) {
+                        setState(() => _puanlananlar.add(katilimci.id));
+                      }
                     },
               child: yukleniyor
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -617,20 +662,58 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.amber)),
                   ]),
                 ),
-              // Puanlama butonu: sadece ben katılmışsam ve bu kişi ben değilsem
-              if (benKatildimMi && !benimMi)
+              if (!benimMi)
                 GestureDetector(
-                  onTap: () => _puanlaDialog(k),
+                  onTap: () => _takipToggle(k.id),
                   child: Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppTheme.amber.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      color: _takipEttiklerim.contains(k.id)
+                          ? AppTheme.accentBlue.withOpacity(0.08)
+                          : AppTheme.primaryGreen.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: _takipEttiklerim.contains(k.id)
+                            ? AppTheme.accentBlue.withOpacity(0.2)
+                            : AppTheme.primaryGreen.withOpacity(0.2),
+                      ),
                     ),
-                    child: const Icon(Icons.star_rounded, size: 14, color: AppTheme.amber),
+                    child: Text(
+                      _takipEttiklerim.contains(k.id) ? 'Takipte' : 'Takip',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: _takipEttiklerim.contains(k.id)
+                            ? AppTheme.accentBlue
+                            : AppTheme.primaryGreen,
+                      ),
+                    ),
                   ),
                 ),
+              if (benKatildimMi && !benimMi)
+                _puanlananlar.contains(k.id)
+                    ? Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryGreen.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.check_rounded, size: 14, color: AppTheme.primaryGreen),
+                      )
+                    : GestureDetector(
+                        onTap: () => _puanlaDialog(k),
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.amber.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.star_rounded, size: 14, color: AppTheme.amber),
+                        ),
+                      ),
               Container(
                 width: 8, height: 8,
                 decoration: BoxDecoration(shape: BoxShape.circle,

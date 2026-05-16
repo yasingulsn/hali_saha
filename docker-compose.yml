@@ -32,8 +32,12 @@ services:
       QUARKUS_HTTP_PORT: 8080
       QUARKUS_HIBERNATE_ORM_DATABASE_GENERATION: update
       QUARKUS_MAILER_MOCK: "true"
+      HALISAHA_UPLOAD_DIR: /app/uploads
+      HALISAHA_UPLOAD_BASE_URL: http://10.0.2.2:8080/api/upload/dosya
     ports:
       - "8080:8080"
+    volumes:
+      - uploads-data:/app/uploads
 
   frontend:
     profiles:
@@ -50,3 +54,4 @@ services:
 
 volumes:
   postgres-data:
+  uploads-data:

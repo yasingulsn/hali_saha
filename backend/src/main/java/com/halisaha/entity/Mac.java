@@ -86,6 +86,12 @@ public class Mac extends PanacheEntityBase {
     @Column(name = "ilce", length = 100)
     public String ilce;
 
+    @Column(name = "takim1_skor")
+    public Integer takim1Skor;
+
+    @Column(name = "takim2_skor")
+    public Integer takim2Skor;
+
     @Column(name = "olusturulma_tarihi")
     public OffsetDateTime olusturulmaTarihi;
 
@@ -96,9 +102,23 @@ public class Mac extends PanacheEntityBase {
                 LocalDate.now());
     }
 
+    public static List<Mac> findAcikMaclarPaged(int pageIndex, int pageSize) {
+        return find("macDurumu = 'ACIK' AND macTarihi >= ?1 ORDER BY macTarihi ASC, baslangicSaati ASC",
+                LocalDate.now()).page(pageIndex, pageSize).list();
+    }
+
+    public static long countAcikMaclar() {
+        return count("macDurumu = 'ACIK' AND macTarihi >= ?1", LocalDate.now());
+    }
+
     public static List<Mac> findByOlusturanId(UUID olusturanId) {
-        return list("olusturanId = ?1 AND macTarihi >= ?2 ORDER BY macTarihi ASC", 
+        return list("olusturanId = ?1 AND macTarihi >= ?2 ORDER BY macTarihi ASC",
                 olusturanId, java.time.LocalDate.now());
+    }
+
+    public static List<Mac> findGecmisByOlusturanId(UUID olusturanId) {
+        return list("olusturanId = ?1 AND macTarihi < ?2 ORDER BY macTarihi DESC",
+                olusturanId, LocalDate.now());
     }
 
     public static List<Mac> findBySahaId(UUID sahaId) {

@@ -3,10 +3,16 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/token_response.dart';
 import '../../services/profil_service.dart';
+import '../../services/auth_service.dart';
 import '../../utils/theme.dart';
+import '../../services/api_client.dart';
+import '../bildirimler_screen.dart';
+import '../isletme_rezervasyon_screen.dart';
 import '../login_screen.dart';
 import '../profil_duzenle_screen.dart';
 import '../takim_istekleri_screen.dart';
+import '../../providers/tema_provider.dart';
+import '../takvim_screen.dart';
 
 class ProfilTab extends StatefulWidget {
   const ProfilTab({super.key});
@@ -17,6 +23,8 @@ class ProfilTab extends StatefulWidget {
 
 class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
   final ProfilService _profilService = ProfilService();
+  final AuthService _authService = AuthService();
+  final ApiClient _apiClient = ApiClient();
   KullaniciBilgi? _profilDetay;
   bool _isLoading = true;
   String? _hata;
@@ -110,6 +118,10 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
               parent: BouncingScrollPhysics(),
             ),
             slivers: [
+              if (!isIsletme && user?.emailDogrulanmis == false)
+                SliverToBoxAdapter(
+                  child: _buildEmailDogrulamaBaneri(context),
+                ),
               if (_hata != null)
                 SliverToBoxAdapter(
                   child: Container(
@@ -579,6 +591,7 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
   // ─── MENÜ ─────────────────────────────────────────────────────
 
   Widget _buildMenuSection(BuildContext context, AuthProvider auth) {
+    final isIsletme = auth.kullaniciTipi == 'ISLETME';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Container(
@@ -598,6 +611,15 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
               color: AppTheme.primaryGreen,
               onTap: () => _navigateToProfilDuzenle(context),
             ),
+            if (isIsletme) ...[
+              _buildMenuDivider(),
+              _buildMenuItem(
+                icon: Icons.calendar_month_rounded,
+                label: 'Rezervasyon Yönetimi',
+                color: AppTheme.accentPurple,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const IsletmeRezervasyonScreen())),
+              ),
+            ],
             _buildMenuDivider(),
             _buildMenuItem(
               icon: Icons.handshake_rounded,
@@ -609,31 +631,51 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
             ),
             _buildMenuDivider(),
             _buildMenuItem(
+              icon: Icons.calendar_month_outlined,
+              label: 'Takvim',
+              color: AppTheme.accentBlue,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TakvimScreen())),
+            ),
+            _buildMenuDivider(),
+            _buildMenuItem(
               icon: Icons.notifications_none_rounded,
               label: 'Bildirimler',
               color: AppTheme.lightOrange,
-              onTap: () {},
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BildirimlerScreen())),
+            ),
+            _buildMenuDivider(),
+            Consumer<TemaProvider>(
+              builder: (_, tema, __) => _buildMenuItemWithTrailing(
+                icon: tema.karanlik ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                label: tema.karanlik ? 'Karanlık Tema' : 'Aydınlık Tema',
+                color: AppTheme.amber,
+                trailing: Switch(
+                  value: tema.karanlik,
+                  onChanged: (_) => tema.toggle(),
+                  activeColor: AppTheme.primaryGreen,
+                ),
+              ),
             ),
             _buildMenuDivider(),
             _buildMenuItem(
               icon: Icons.security_rounded,
               label: 'Güvenlik',
               color: AppTheme.lightGreen,
-              onTap: () {},
+              onTap: () => _guvenilikDialog(context),
             ),
             _buildMenuDivider(),
             _buildMenuItem(
               icon: Icons.help_outline_rounded,
               label: 'Yardım & Destek',
               color: AppTheme.textSecondary,
-              onTap: () {},
+              onTap: () => _yardimDialog(context),
             ),
             _buildMenuDivider(),
             _buildMenuItem(
               icon: Icons.info_outline_rounded,
               label: 'Hakkında',
               color: AppTheme.textSecondary,
-              onTap: () {},
+              onTap: () => _hakkindaDialog(context),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -646,7 +688,7 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
               icon: Icons.devices_rounded,
               label: 'Tüm Cihazlardan Çıkış',
               color: AppTheme.accentCoral,
-              onTap: () {},
+              onTap: () => _tumCihazlardanCikis(context, auth),
             ),
             _buildMenuItem(
               icon: Icons.logout_rounded,
@@ -716,6 +758,210 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuItemWithTrailing({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Widget trailing,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 38, height: 38,
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(11)),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textPrimary))),
+          trailing,
+        ],
+      ),
+    );
+  }
+
+  // ─── EMAIL DOĞRULAMA ──────────────────────────────────────────
+
+  Widget _buildEmailDogrulamaBaneri(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _emailDogrulamaGonder(context),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.lightOrange.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.lightOrange.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(
+                color: AppTheme.lightOrange.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: const Icon(Icons.mark_email_unread_rounded, color: AppTheme.lightOrange, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Email adresiniz doğrulanmamış',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.lightOrange),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Doğrulama kodu almak için dokunun',
+                    style: TextStyle(fontSize: 11, color: AppTheme.lightOrange.withOpacity(0.7)),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: AppTheme.lightOrange.withOpacity(0.5), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _emailDogrulamaGonder(BuildContext context) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)),
+    );
+
+    try {
+      await _apiClient.dio.post('/api/auth/email-dogrulama-gonder');
+      if (context.mounted) Navigator.pop(context);
+      if (context.mounted) _emailKoduGirDialog(context);
+    } catch (e) {
+      if (context.mounted) Navigator.pop(context);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Kod gönderilemedi: ${e.toString()}'),
+          backgroundColor: AppTheme.errorRed,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
+  }
+
+  void _emailKoduGirDialog(BuildContext context) {
+    final kodCtrl = TextEditingController();
+    bool yukleniyor = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: AppTheme.cardDark,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [
+            Icon(Icons.verified_rounded, color: AppTheme.primaryGreen, size: 22),
+            SizedBox(width: 10),
+            Text('Email Doğrulama', style: TextStyle(color: AppTheme.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Email adresinize 6 haneli doğrulama kodu gönderdik. Lütfen kodu girin.',
+                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withOpacity(0.8), height: 1.5),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: kodCtrl,
+                keyboardType: TextInputType.text,
+                textCapitalization: TextCapitalization.characters,
+                textAlign: TextAlign.center,
+                maxLength: 6,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 8,
+                ),
+                decoration: InputDecoration(
+                  hintText: '------',
+                  hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.3), fontSize: 28, letterSpacing: 8),
+                  filled: true,
+                  fillColor: AppTheme.inputFill,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  counterText: '',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: yukleniyor ? null : () => Navigator.pop(ctx),
+              child: const Text('İptal', style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            TextButton(
+              onPressed: yukleniyor
+                  ? null
+                  : () async {
+                      try {
+                        await _apiClient.dio.post('/api/auth/email-dogrulama-gonder');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Yeni kod gönderildi'),
+                            backgroundColor: AppTheme.primaryGreen,
+                            behavior: SnackBarBehavior.floating,
+                          ));
+                        }
+                      } catch (_) {}
+                    },
+              child: const Text('Tekrar Gönder', style: TextStyle(color: AppTheme.accentBlue, fontSize: 13)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: AppTheme.backgroundDark),
+              onPressed: yukleniyor
+                  ? null
+                  : () async {
+                      final kod = kodCtrl.text.trim();
+                      if (kod.length < 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('6 haneli kodu girin')));
+                        return;
+                      }
+                      setS(() => yukleniyor = true);
+                      try {
+                        await _apiClient.dio.post('/api/auth/email-dogrula?token=$kod');
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Email başarıyla doğrulandı!'),
+                            backgroundColor: AppTheme.primaryGreen,
+                            behavior: SnackBarBehavior.floating,
+                          ));
+                          _loadProfil();
+                        }
+                      } catch (e) {
+                        setS(() => yukleniyor = false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: const Text('Geçersiz kod. Tekrar deneyin.'),
+                            backgroundColor: AppTheme.errorRed,
+                            behavior: SnackBarBehavior.floating,
+                          ));
+                        }
+                      }
+                    },
+              child: yukleniyor
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Doğrula'),
+            ),
+          ],
         ),
       ),
     );
@@ -808,6 +1054,241 @@ class _ProfilTabState extends State<ProfilTab> with TickerProviderStateMixin {
 
     if (result == true && mounted) {
       _loadProfil();
+    }
+  }
+
+  // ─── GÜVENLİK ─────────────────────────────────────────────────
+
+  void _guvenilikDialog(BuildContext context) {
+    final mevcutCtrl = TextEditingController();
+    final yeniCtrl = TextEditingController();
+    final tekrarCtrl = TextEditingController();
+    bool mevcutGizli = true, yeniGizli = true, tekrarGizli = true;
+    bool yukleniyor = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: AppTheme.cardDark,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [
+            Icon(Icons.lock_outline_rounded, color: AppTheme.lightGreen, size: 22),
+            SizedBox(width: 10),
+            Text('Şifre Değiştir', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _sifreField('Mevcut Şifre', mevcutCtrl, mevcutGizli, () => setS(() => mevcutGizli = !mevcutGizli)),
+              const SizedBox(height: 12),
+              _sifreField('Yeni Şifre', yeniCtrl, yeniGizli, () => setS(() => yeniGizli = !yeniGizli)),
+              const SizedBox(height: 12),
+              _sifreField('Yeni Şifre (Tekrar)', tekrarCtrl, tekrarGizli, () => setS(() => tekrarGizli = !tekrarGizli)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: yukleniyor ? null : () => Navigator.pop(ctx),
+              child: const Text('İptal', style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.lightGreen, foregroundColor: AppTheme.backgroundDark),
+              onPressed: yukleniyor
+                  ? null
+                  : () async {
+                      if (yeniCtrl.text != tekrarCtrl.text) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yeni şifreler eşleşmiyor')));
+                        return;
+                      }
+                      if (yeniCtrl.text.length < 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şifre en az 6 karakter olmalı')));
+                        return;
+                      }
+                      setS(() => yukleniyor = true);
+                      final auth = context.read<AuthProvider>();
+                      final email = auth.currentUser?.email ?? '';
+                      final res = await _authService.sifreSifirlamaIstegi(email, 'KULLANICI');
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(res.basarili ? 'Şifre sıfırlama bağlantısı e-postanıza gönderildi.' : res.mesaj),
+                        backgroundColor: res.basarili ? AppTheme.primaryGreen : AppTheme.errorRed,
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    },
+              child: yukleniyor
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Sıfırlama Gönder'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sifreField(String label, TextEditingController ctrl, bool gizli, VoidCallback toggle) {
+    return TextField(
+      controller: ctrl,
+      obscureText: gizli,
+      style: const TextStyle(color: AppTheme.textPrimary),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.7), fontSize: 13),
+        filled: true,
+        fillColor: AppTheme.inputFill,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        suffixIcon: IconButton(
+          icon: Icon(gizli ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 18, color: AppTheme.textSecondary),
+          onPressed: toggle,
+        ),
+      ),
+    );
+  }
+
+  void _yardimDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.help_outline_rounded, color: AppTheme.textSecondary, size: 22),
+          SizedBox(width: 10),
+          Text('Yardım & Destek', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _yardimMadde(Icons.sports_soccer_rounded, 'Maç oluşturmak için "Maçlar" sekmesindeki + butonunu kullanın.'),
+            _yardimMadde(Icons.stadium_rounded, 'Saha aramak için "Sahalar" sekmesini kullanın.'),
+            _yardimMadde(Icons.groups_rounded, 'Takım ilanları için "Keşfet" sekmesindeki "Takım İlanları" bölümüne gidin.'),
+            _yardimMadde(Icons.notifications_rounded, 'Bildirimlerinizi üst sağdaki zil ikonundan takip edin.'),
+            _yardimMadde(Icons.stars_rounded, 'Disiplin puanınız maçlardaki davranışlarınıza göre güncellenir.'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryGreen.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(children: [
+                Icon(Icons.email_rounded, color: AppTheme.primaryGreen, size: 16),
+                SizedBox(width: 8),
+                Text('destek@halisaha.app', style: TextStyle(fontSize: 12, color: AppTheme.primaryGreen, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryGreen, foregroundColor: AppTheme.backgroundDark),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tamam'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _yardimMadde(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 16, color: AppTheme.textSecondary),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.8), height: 1.4))),
+      ]),
+    );
+  }
+
+  void _hakkindaDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72, height: 72,
+              decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(20)),
+              child: const Icon(Icons.sports_soccer_rounded, color: Colors.white, size: 36),
+            ),
+            const SizedBox(height: 16),
+            const Text('Halı Saha', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+            const SizedBox(height: 4),
+            const Text('Sürüm 1.0.0', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+            const SizedBox(height: 16),
+            Text(
+              'Halı saha rezervasyonu, maç organizasyonu ve oyuncu eşleştirme platformu.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withOpacity(0.8), height: 1.5),
+            ),
+            const SizedBox(height: 16),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _infoChip('Flutter', AppTheme.accentBlue),
+              const SizedBox(width: 8),
+              _infoChip('Quarkus', AppTheme.accentCoral),
+              const SizedBox(width: 8),
+              _infoChip('PostgreSQL', AppTheme.accentPurple),
+            ]),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Kapat', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+
+  // ─── TÜM CİHAZLARDAN ÇIKIŞ ───────────────────────────────────
+
+  Future<void> _tumCihazlardanCikis(BuildContext context, AuthProvider auth) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Tüm Cihazlardan Çıkış', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700)),
+        content: const Text(
+          'Tüm cihazlardaki oturumlarınız sonlandırılacak. Devam etmek istiyor musunuz?',
+          style: TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('İptal', style: TextStyle(color: AppTheme.textSecondary))),
+          Container(
+            decoration: BoxDecoration(color: AppTheme.accentCoral.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+            child: TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Çıkış Yap', style: TextStyle(color: AppTheme.accentCoral, fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    await _authService.tumCihazlardanCikis();
+    await auth.cikis();
+    if (context.mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
     }
   }
 

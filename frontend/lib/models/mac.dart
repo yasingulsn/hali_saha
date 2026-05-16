@@ -22,6 +22,8 @@ class Mac {
   final String? rakipNotu;
   final String? il;
   final String? ilce;
+  final int? takim1Skor;
+  final int? takim2Skor;
   final List<KatilimciBilgi>? katilimcilar;
 
   Mac({
@@ -48,6 +50,8 @@ class Mac {
     this.rakipNotu,
     this.il,
     this.ilce,
+    this.takim1Skor,
+    this.takim2Skor,
     this.katilimcilar,
   });
 
@@ -76,6 +80,8 @@ class Mac {
       rakipNotu: json['rakipNotu'],
       il: json['il'],
       ilce: json['ilce'],
+      takim1Skor: json['takim1Skor'],
+      takim2Skor: json['takim2Skor'],
       katilimcilar: json['katilimcilar'] != null
           ? (json['katilimcilar'] as List)
               .map((k) => KatilimciBilgi.fromJson(k))

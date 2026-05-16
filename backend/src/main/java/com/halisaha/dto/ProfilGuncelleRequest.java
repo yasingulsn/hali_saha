@@ -18,4 +18,7 @@ public class ProfilGuncelleRequest {
     public String dogumTarihi; // "yyyy-MM-dd" formatında
     public String il;
     public String ilce;
+
+    @Size(max = 1000, message = "Fotoğraf URL en fazla 1000 karakter olabilir")
+    public String profilFotoUrl;
 }

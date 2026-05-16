@@ -64,6 +64,9 @@ public class Kullanici extends PanacheEntityBase {
     @Column(name = "email_dogrulanmis")
     public Boolean emailDogrulanmis = false;
 
+    @Column(name = "email_dogrulama_token", length = 100)
+    public String emailDogrulamaToken;
+
     @Column(name = "hesap_durumu", length = 20)
     public String hesapDurumu = "AKTIF";
 

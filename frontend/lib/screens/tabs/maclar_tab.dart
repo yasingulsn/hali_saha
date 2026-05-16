@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/mac.dart';
+import '../../models/rezervasyon.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/mac_service.dart';
+import '../../services/rezervasyon_service.dart';
 import '../../utils/theme.dart';
 import '../mac_detay_screen.dart';
 import '../mac_olustur_screen.dart';
+import '../saha_detay_screen.dart';
 
 class MaclarTab extends StatefulWidget {
   const MaclarTab({super.key});
@@ -18,9 +21,12 @@ class MaclarTab extends StatefulWidget {
 class _MaclarTabState extends State<MaclarTab> {
   final _apiClient = ApiClient();
   late final MacService _macService = MacService(_apiClient);
+  late final RezervasyonService _rezervasyonService = RezervasyonService(_apiClient);
 
   List<Mac> _acikMaclar = [];
   List<Mac> _benimMaclarim = [];
+  List<Mac> _gecmisMaclarim = [];
+  List<Rezervasyon> _rezervasyonlarim = [];
   bool _yukleniyor = true;
   String? _hata;
   int _seciliTab = 0;
@@ -50,6 +56,16 @@ class _MaclarTabState extends State<MaclarTab> {
       setState(() => _benimMaclarim = benimRes.veri!);
     }
 
+    final gecmisRes = await _macService.gecmisMaclarim();
+    if (mounted && gecmisRes.basarili && gecmisRes.veri != null) {
+      setState(() => _gecmisMaclarim = gecmisRes.veri!);
+    }
+
+    final rezervasyonRes = await _rezervasyonService.benimRezervasyonlarim();
+    if (mounted && rezervasyonRes.basarili && rezervasyonRes.veri != null) {
+      setState(() => _rezervasyonlarim = rezervasyonRes.veri!);
+    }
+
     if (mounted) setState(() => _yukleniyor = false);
   }
 
@@ -68,8 +84,12 @@ class _MaclarTabState extends State<MaclarTab> {
             const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen)))
           else if (_seciliTab == 0)
             _buildMacListeSliver(_acikMaclar, 'Henüz açık maç yok', Icons.sports_soccer_outlined)
+          else if (_seciliTab == 1)
+            _buildMacListeSliver(_benimMaclarim, 'Henüz maçınız yok', Icons.event_busy_rounded)
+          else if (_seciliTab == 2)
+            _buildRezervasyonlarSliver()
           else
-            _buildMacListeSliver(_benimMaclarim, 'Henüz maçınız yok', Icons.event_busy_rounded),
+            _buildGecmisMaclarSliver(),
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
@@ -86,8 +106,10 @@ class _MaclarTabState extends State<MaclarTab> {
           border: Border.all(color: Colors.white.withOpacity(0.04)),
         ),
         child: Row(children: [
-          _buildToggleItem(0, 'Açık Maçlar', _acikMaclar.length),
+          _buildToggleItem(0, 'Açık', _acikMaclar.length),
           _buildToggleItem(1, 'Maçlarım', _benimMaclarim.length),
+          _buildToggleItem(2, 'Rezerve', _rezervasyonlarim.length),
+          _buildToggleItem(3, 'Geçmiş', _gecmisMaclarim.length),
         ]),
       ),
     );
@@ -382,5 +404,248 @@ class _MaclarTabState extends State<MaclarTab> {
         ),
       ),
     );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // REZERVASYONLARIM
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildRezervasyonlarSliver() {
+    if (_rezervasyonlarim.isEmpty) {
+      return SliverFillRemaining(
+        child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            width: 80, height: 80,
+            decoration: const BoxDecoration(color: AppTheme.cardDark, shape: BoxShape.circle),
+            child: Icon(Icons.calendar_today_outlined, color: AppTheme.textSecondary.withOpacity(0.25), size: 40),
+          ),
+          const SizedBox(height: 20),
+          const Text('Rezervasyonunuz yok', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text('Saha detay sayfasından rezervasyon yapabilirsiniz',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5), fontSize: 13)),
+        ])),
+      );
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      sliver: SliverList(delegate: SliverChildBuilderDelegate(
+        (context, index) => _buildRezervasyonKart(_rezervasyonlarim[index]),
+        childCount: _rezervasyonlarim.length,
+      )),
+    );
+  }
+
+  Widget _buildRezervasyonKart(Rezervasyon rezervasyon) {
+    Color durumRenk;
+    IconData durumIcon;
+    switch (rezervasyon.durum) {
+      case 'ONAYLANDI':
+        durumRenk = AppTheme.primaryGreen;
+        durumIcon = Icons.check_circle_outline_rounded;
+        break;
+      case 'IPTAL':
+        durumRenk = AppTheme.errorRed;
+        durumIcon = Icons.cancel_outlined;
+        break;
+      case 'TAMAMLANDI':
+        durumRenk = AppTheme.accentBlue;
+        durumIcon = Icons.task_alt_rounded;
+        break;
+      default:
+        durumRenk = AppTheme.lightOrange;
+        durumIcon = Icons.schedule_rounded;
+    }
+
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SahaDetayScreen(sahaId: rezervasyon.sahaId))),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: durumRenk.withOpacity(0.12)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Text(rezervasyon.sahaAdi ?? 'Bilinmeyen Saha',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: durumRenk.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(durumIcon, size: 12, color: durumRenk),
+                const SizedBox(width: 4),
+                Text(rezervasyon.durumText, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: durumRenk)),
+              ]),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          if (rezervasyon.sahaAdresi != null)
+            Row(children: [
+              Icon(Icons.location_on_outlined, size: 13, color: AppTheme.textSecondary.withOpacity(0.5)),
+              const SizedBox(width: 4),
+              Expanded(child: Text(rezervasyon.sahaAdresi!,
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.6)),
+                maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            Icon(Icons.calendar_today_rounded, size: 13, color: AppTheme.textSecondary.withOpacity(0.5)),
+            const SizedBox(width: 6),
+            Text(rezervasyon.rezervasyonTarihi,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withOpacity(0.8))),
+            const SizedBox(width: 16),
+            Icon(Icons.access_time_rounded, size: 13, color: AppTheme.textSecondary.withOpacity(0.5)),
+            const SizedBox(width: 6),
+            Text('${rezervasyon.baslangicSaati} – ${rezervasyon.bitisSaati}',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withOpacity(0.8))),
+            const Spacer(),
+            if (rezervasyon.toplamUcret != null && rezervasyon.toplamUcret! > 0)
+              Text('₺${rezervasyon.toplamUcret!.toStringAsFixed(0)}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.primaryGreen)),
+          ]),
+          if (rezervasyon.beklemede) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.errorRed,
+                  side: BorderSide(color: AppTheme.errorRed.withOpacity(0.3)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () => _rezervasyonIptal(rezervasyon),
+                icon: const Icon(Icons.cancel_outlined, size: 16),
+                label: const Text('Rezervasyonu İptal Et', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // GEÇMİŞ MAÇLAR
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildGecmisMaclarSliver() {
+    if (_gecmisMaclarim.isEmpty) {
+      return SliverFillRemaining(
+        child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            width: 80, height: 80,
+            decoration: const BoxDecoration(color: AppTheme.cardDark, shape: BoxShape.circle),
+            child: Icon(Icons.history_rounded, color: AppTheme.textSecondary.withOpacity(0.25), size: 40),
+          ),
+          const SizedBox(height: 20),
+          const Text('Geçmiş maç yok', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text('Oynadığınız maçlar burada görünecek',
+            style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5), fontSize: 13)),
+        ])),
+      );
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      sliver: SliverList(delegate: SliverChildBuilderDelegate(
+        (context, index) => _buildGecmisMacKart(_gecmisMaclarim[index]),
+        childCount: _gecmisMaclarim.length,
+      )),
+    );
+  }
+
+  Widget _buildGecmisMacKart(Mac mac) {
+    final userId = context.read<AuthProvider>().currentUser?.id;
+    final benOlusturdum = mac.olusturanId == userId;
+
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MacDetayScreen(macId: mac.id))),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.cardDark,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.04)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            _buildBadge(mac.format, AppTheme.textSecondary.withOpacity(0.6)),
+            const SizedBox(width: 6),
+            _buildBadge(mac.seviyeText, AppTheme.accentPurple.withOpacity(0.7)),
+            if (benOlusturdum) ...[const SizedBox(width: 6), _buildBadge('Sizin', AppTheme.primaryGreen.withOpacity(0.7))],
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.accentBlue.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(mac.macDurumu == 'TAMAMLANDI' ? 'Tamamlandı' : 'İptal',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                  color: mac.macDurumu == 'TAMAMLANDI' ? AppTheme.accentBlue : AppTheme.errorRed)),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Text(mac.macBasligi, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+          const SizedBox(height: 6),
+          Row(children: [
+            Icon(Icons.calendar_today_rounded, size: 13, color: AppTheme.textSecondary.withOpacity(0.4)),
+            const SizedBox(width: 5),
+            Text('${mac.macTarihi}  ${mac.baslangicSaati}',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.6))),
+            const Spacer(),
+            Icon(Icons.people_rounded, size: 13, color: AppTheme.textSecondary.withOpacity(0.4)),
+            const SizedBox(width: 4),
+            Text('${mac.mevcutOyuncuSayisi}/${mac.maxOyuncuSayisi}',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.6))),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _rezervasyonIptal(Rezervasyon rezervasyon) async {
+    final onay = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardDarkElevated,
+        title: const Text('Rezervasyon iptal edilsin mi?', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        content: const Text('Bu işlem geri alınamaz.', style: TextStyle(color: AppTheme.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Vazgeç')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('İptal Et', style: TextStyle(color: AppTheme.errorRed)),
+          ),
+        ],
+      ),
+    );
+    if (onay != true) return;
+
+    final res = await _rezervasyonService.iptalEt(rezervasyon.id);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(res.basarili ? 'Rezervasyon iptal edildi' : res.mesaj),
+        backgroundColor: res.basarili ? AppTheme.primaryGreen : AppTheme.errorRed,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+    if (res.basarili) _yukle();
   }
 }

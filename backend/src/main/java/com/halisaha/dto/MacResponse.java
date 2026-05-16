@@ -33,6 +33,8 @@ public class MacResponse {
     public String rakipNotu;
     public String il;
     public String ilce;
+    public Integer takim1Skor;
+    public Integer takim2Skor;
     public List<KatilimciBilgi> katilimcilar;
 
     public MacResponse() {}
@@ -63,6 +65,8 @@ public class MacResponse {
         r.rakipNotu = mac.rakipNotu;
         r.il = mac.il;
         r.ilce = mac.ilce;
+        r.takim1Skor = mac.takim1Skor;
+        r.takim2Skor = mac.takim2Skor;
         r.katilimcilar = katilimcilar;
         return r;
     }

@@ -176,6 +176,20 @@ class AuthService {
     }
   }
 
+  Future<ApiResponse<void>> tumCihazlardanCikis() async {
+    try {
+      final response = await _apiClient.dio.post(ApiConstants.tumCihazlardanCikis);
+      return ApiResponse(
+        basarili: response.data['basarili'] ?? false,
+        mesaj: response.data['mesaj'] ?? '',
+      );
+    } on DioException catch (e) {
+      return ApiResponse(basarili: false, mesaj: _handleDioError(e).mesaj);
+    } finally {
+      await _storage.clearAll();
+    }
+  }
+
   // ─── ŞİFRE SIFIRLAMA ────────────────────────────────────────
 
   Future<ApiResponse<void>> sifreSifirlamaIstegi(String email, String kullaniciTipi) async {

@@ -45,6 +45,7 @@ class KullaniciBilgi {
   final int toplamMacSayisi;
   final int olusturduguMacSayisi;
   final int toplamIlanSayisi;
+  final bool? emailDogrulanmis;
 
   KullaniciBilgi({
     required this.id,
@@ -64,6 +65,7 @@ class KullaniciBilgi {
     this.toplamMacSayisi = 0,
     this.olusturduguMacSayisi = 0,
     this.toplamIlanSayisi = 0,
+    this.emailDogrulanmis,
   });
 
   factory KullaniciBilgi.fromJson(Map<String, dynamic> json) {
@@ -89,6 +91,7 @@ class KullaniciBilgi {
       toplamMacSayisi: json['toplamMacSayisi'] ?? 0,
       olusturduguMacSayisi: json['olusturduguMacSayisi'] ?? 0,
       toplamIlanSayisi: json['toplamIlanSayisi'] ?? 0,
+      emailDogrulanmis: json['emailDogrulanmis'],
     );
   }
 

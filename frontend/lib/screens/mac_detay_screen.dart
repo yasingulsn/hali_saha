@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/mac.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/mac_service.dart';
 import '../utils/theme.dart';
+import 'kullanici_profil_screen.dart';
 
 class MacDetayScreen extends StatefulWidget {
   final String macId;
@@ -19,14 +22,25 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
   Mac? _mac;
   bool _yukleniyor = true;
   bool _islemYapiliyor = false;
+  Timer? _yenilemeTicker;
 
   @override
   void initState() {
     super.initState();
     _yukle();
+    _yenilemeTicker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && !_islemYapiliyor) _yukle(sessiz: true);
+    });
   }
 
-  Future<void> _yukle() async {
+  @override
+  void dispose() {
+    _yenilemeTicker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _yukle({bool sessiz = false}) async {
+    if (!sessiz) setState(() => _yukleniyor = true);
     final res = await _macService.macDetay(widget.macId);
     if (mounted) {
       setState(() {
@@ -73,6 +87,100 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
     ));
   }
 
+  void _paylas() {
+    if (_mac == null) return;
+    final m = _mac!;
+    final text = '⚽ ${m.macBasligi}\n'
+        '📅 ${m.macTarihi}  ${m.baslangicSaati} - ${m.bitisSaati}\n'
+        '👥 ${m.mevcutOyuncuSayisi}/${m.maxOyuncuSayisi} oyuncu\n'
+        '${m.sahaAdi != null ? '🏟 ${m.sahaAdi}\n' : ''}'
+        '\nHali Saha uygulaması üzerinden maça katıl!';
+    Share.share(text);
+  }
+
+  void _puanlaDialog(KatilimciBilgi katilimci) {
+    int seciliPuan = 5;
+    bool yukleniyor = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: AppTheme.cardDark,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [
+            Icon(Icons.stars_rounded, color: AppTheme.amber, size: 22),
+            SizedBox(width: 10),
+            Text('Oyuncuyu Puanla', style: TextStyle(color: AppTheme.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(katilimci.adSoyad, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              const SizedBox(height: 4),
+              Text('Bu maçtaki performansını değerlendir', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.7))),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) {
+                  final yildiz = i + 1;
+                  return GestureDetector(
+                    onTap: () => setS(() => seciliPuan = yildiz),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(
+                        yildiz <= seciliPuan ? Icons.star_rounded : Icons.star_outline_rounded,
+                        color: AppTheme.amber,
+                        size: 36,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _puanAciklamasi(seciliPuan),
+                style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: yukleniyor ? null : () => Navigator.pop(ctx),
+              child: const Text('Vazgeç', style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.amber, foregroundColor: Colors.white),
+              onPressed: yukleniyor
+                  ? null
+                  : () async {
+                      setS(() => yukleniyor = true);
+                      final res = await _macService.oyuncuPuanla(widget.macId, katilimci.id, seciliPuan);
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      _showSnackbar(res.mesaj, res.basarili ? AppTheme.primaryGreen : AppTheme.errorRed);
+                    },
+              child: yukleniyor
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Puanla'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _puanAciklamasi(int puan) {
+    switch (puan) {
+      case 1: return 'Çok kötü';
+      case 2: return 'Kötü';
+      case 3: return 'Orta';
+      case 4: return 'İyi';
+      case 5: return 'Mükemmel!';
+      default: return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userId = context.read<AuthProvider>().currentUser?.id;
@@ -110,12 +218,20 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
                                 const SizedBox(height: 18),
                                 _buildKatilimcilar(),
                               ],
+                              if (_mac!.takim1Skor != null && _mac!.takim2Skor != null) ...[
+                                const SizedBox(height: 14),
+                                _buildSkorBanner(),
+                              ],
                               if (_mac!.aciklama != null && _mac!.aciklama!.isNotEmpty) ...[
                                 const SizedBox(height: 14),
                                 _buildAciklama(),
                               ],
                               const SizedBox(height: 24),
                               _buildAksiyon(userId),
+                              if (_mac!.olusturanId == userId) ...[
+                                const SizedBox(height: 12),
+                                _buildSkorButton(),
+                              ],
                             ],
                           ),
                         ),
@@ -139,6 +255,10 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
           const Expanded(
             child: Text('Maç Detayı',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+          ),
+          IconButton(
+            icon: const Icon(Icons.share_rounded, color: AppTheme.textSecondary, size: 20),
+            onPressed: () => _paylas(),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -330,7 +450,129 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
     );
   }
 
+  Widget _buildSkorBanner() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [AppTheme.primaryGreen.withOpacity(0.1), AppTheme.accentBlue.withOpacity(0.05)]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.primaryGreen.withOpacity(0.15)),
+      ),
+      child: Column(children: [
+        const Text('Maç Sonucu', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+        const SizedBox(height: 10),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text('${_mac!.takim1Skor}', style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text('-', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w300, color: AppTheme.textSecondary.withOpacity(0.5))),
+          ),
+          Text('${_mac!.takim2Skor}', style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _buildSkorButton() {
+    return GestureDetector(
+      onTap: _skorDialog,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.accentBlue.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.accentBlue.withOpacity(0.2)),
+        ),
+        child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.scoreboard_rounded, size: 18, color: AppTheme.accentBlue),
+          SizedBox(width: 8),
+          Text('Skor Gir', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.accentBlue)),
+        ]),
+      ),
+    );
+  }
+
+  void _skorDialog() {
+    final t1Ctrl = TextEditingController(text: _mac!.takim1Skor?.toString() ?? '0');
+    final t2Ctrl = TextEditingController(text: _mac!.takim2Skor?.toString() ?? '0');
+    bool yukleniyor = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: AppTheme.cardDark,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [
+            Icon(Icons.scoreboard_rounded, color: AppTheme.accentBlue, size: 22),
+            SizedBox(width: 10),
+            Text('Maç Skoru', style: TextStyle(color: AppTheme.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
+          ]),
+          content: Row(children: [
+            Expanded(child: TextField(
+              controller: t1Ctrl,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                labelText: 'Takım 1',
+                labelStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                filled: true,
+                fillColor: AppTheme.backgroundDark,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            )),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text('-', style: TextStyle(fontSize: 24, color: AppTheme.textSecondary.withOpacity(0.5))),
+            ),
+            Expanded(child: TextField(
+              controller: t2Ctrl,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                labelText: 'Takım 2',
+                labelStyle: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                filled: true,
+                fillColor: AppTheme.backgroundDark,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            )),
+          ]),
+          actions: [
+            TextButton(
+              onPressed: yukleniyor ? null : () => Navigator.pop(ctx),
+              child: const Text('Vazgeç', style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentBlue, foregroundColor: Colors.white),
+              onPressed: yukleniyor ? null : () async {
+                final t1 = int.tryParse(t1Ctrl.text) ?? 0;
+                final t2 = int.tryParse(t2Ctrl.text) ?? 0;
+                setS(() => yukleniyor = true);
+                final res = await _macService.skorGir(widget.macId, t1, t2);
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                if (mounted) {
+                  _showSnackbar(res.mesaj, res.basarili ? AppTheme.primaryGreen : AppTheme.errorRed);
+                  if (res.basarili && res.veri != null) setState(() => _mac = res.veri);
+                }
+              },
+              child: yukleniyor
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Kaydet'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildKatilimcilar() {
+    final userId = context.read<AuthProvider>().currentUser?.id;
+    final benKatildimMi = _mac!.katilimcilar?.any((k) => k.id == userId) ?? false;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -340,42 +582,64 @@ class _MacDetayScreenState extends State<MacDetayScreen> {
           Text('${_mac!.katilimcilar!.length} kişi', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withOpacity(0.6))),
         ]),
         const SizedBox(height: 12),
-        ...(_mac!.katilimcilar!.map((k) => Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppTheme.cardDark, borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.03)),
-          ),
-          child: Row(children: [
-            Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(shape: BoxShape.circle, gradient: AppTheme.glassGradient),
-              child: const Icon(Icons.person_rounded, color: AppTheme.primaryGreen, size: 18),
+        ...(_mac!.katilimcilar!.map((k) {
+          final benimMi = k.id == userId;
+          return GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => KullaniciProfilScreen(kullaniciId: k.id, adSoyad: k.adSoyad),
+            )),
+            child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.cardDark, borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.03)),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(k.adSoyad, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-            ),
-            if (k.disiplinPuani != null)
+            child: Row(children: [
               Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: AppTheme.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.shield_rounded, size: 10, color: AppTheme.amber),
-                  const SizedBox(width: 3),
-                  Text(k.disiplinPuani!.toStringAsFixed(1),
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.amber)),
-                ]),
+                width: 36, height: 36,
+                decoration: BoxDecoration(shape: BoxShape.circle, gradient: AppTheme.glassGradient),
+                child: const Icon(Icons.person_rounded, color: AppTheme.primaryGreen, size: 18),
               ),
-            Container(
-              width: 8, height: 8,
-              decoration: BoxDecoration(shape: BoxShape.circle,
-                color: k.katilimDurumu == 'ONAYLANDI' ? AppTheme.neonGreen : AppTheme.amber),
-            ),
-          ]),
-        ))),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(k.adSoyad, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              ),
+              if (k.disiplinPuani != null)
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: AppTheme.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.shield_rounded, size: 10, color: AppTheme.amber),
+                    const SizedBox(width: 3),
+                    Text(k.disiplinPuani!.toStringAsFixed(1),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.amber)),
+                  ]),
+                ),
+              // Puanlama butonu: sadece ben katılmışsam ve bu kişi ben değilsem
+              if (benKatildimMi && !benimMi)
+                GestureDetector(
+                  onTap: () => _puanlaDialog(k),
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.amber.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.star_rounded, size: 14, color: AppTheme.amber),
+                  ),
+                ),
+              Container(
+                width: 8, height: 8,
+                decoration: BoxDecoration(shape: BoxShape.circle,
+                  color: k.katilimDurumu == 'ONAYLANDI' ? AppTheme.neonGreen : AppTheme.amber),
+              ),
+            ]),
+          ),
+          );
+        })),
       ],
     );
   }

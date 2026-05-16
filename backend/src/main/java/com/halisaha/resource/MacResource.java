@@ -3,6 +3,8 @@ package com.halisaha.resource;
 import com.halisaha.dto.ApiResponse;
 import com.halisaha.dto.MacRequest;
 import com.halisaha.dto.MacResponse;
+import com.halisaha.dto.MacSkorRequest;
+import com.halisaha.dto.OyuncuPuanlaRequest;
 import com.halisaha.service.MacService;
 import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
@@ -29,8 +31,12 @@ public class MacResource {
 
     @GET
     @PermitAll
-    public Response acikMaclar() {
-        List<MacResponse> maclar = macService.acikMaclar();
+    public Response acikMaclar(
+            @QueryParam("page") @DefaultValue("0") int page,
+            @QueryParam("size") @DefaultValue("0") int size) {
+        List<MacResponse> maclar = size > 0
+                ? macService.acikMaclarPaged(page, size)
+                : macService.acikMaclar();
         return Response.ok(ApiResponse.basarili("Açık maçlar listelendi", maclar)).build();
     }
 
@@ -49,6 +55,15 @@ public class MacResource {
         UUID kullaniciId = UUID.fromString(jwt.getSubject());
         List<MacResponse> maclar = macService.kullaniciMaclari(kullaniciId);
         return Response.ok(ApiResponse.basarili("Maçlarınız", maclar)).build();
+    }
+
+    @GET
+    @Path("/benim/gecmis")
+    @RolesAllowed("KULLANICI")
+    public Response benimGecmisMaclarim() {
+        UUID kullaniciId = UUID.fromString(jwt.getSubject());
+        List<MacResponse> maclar = macService.kullaniciGecmisMaclari(kullaniciId);
+        return Response.ok(ApiResponse.basarili("Geçmiş maçlarınız", maclar)).build();
     }
 
     @GET
@@ -103,6 +118,24 @@ public class MacResource {
         UUID kullaniciId = UUID.fromString(jwt.getSubject());
         MacResponse mac = macService.mactanAyril(id, kullaniciId);
         return Response.ok(ApiResponse.basarili("Maçtan ayrıldınız", mac)).build();
+    }
+
+    @POST
+    @Path("/{id}/puanla")
+    @RolesAllowed("KULLANICI")
+    public Response oyuncuPuanla(@PathParam("id") UUID macId, @Valid OyuncuPuanlaRequest request) {
+        UUID puanlayanId = UUID.fromString(jwt.getSubject());
+        macService.oyuncuPuanla(macId, request.hedefKullaniciId, request.puan, puanlayanId);
+        return Response.ok(ApiResponse.basarili("Oyuncu puanlandı")).build();
+    }
+
+    @POST
+    @Path("/{id}/skor")
+    @RolesAllowed("KULLANICI")
+    public Response skorGir(@PathParam("id") UUID macId, @Valid MacSkorRequest request) {
+        UUID kullaniciId = UUID.fromString(jwt.getSubject());
+        MacResponse mac = macService.skorGir(macId, request, kullaniciId);
+        return Response.ok(ApiResponse.basarili("Skor kaydedildi", mac)).build();
     }
 
     @GET

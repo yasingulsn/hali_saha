@@ -243,6 +243,7 @@ public class AuthService {
         r.hesapDurumu = k.hesapDurumu;
         r.il = k.il;
         r.ilce = k.ilce;
+        r.emailDogrulanmis = k.emailDogrulanmis;
 
         if (k.dogumTarihi != null) {
             r.dogumTarihi = k.dogumTarihi.toString();
@@ -272,6 +273,7 @@ public class AuthService {
         k.tercihEdilenPozisyon = req.tercihEdilenPozisyon;
         k.il = req.il;
         k.ilce = req.ilce;
+        if (req.profilFotoUrl != null) k.profilFotoUrl = req.profilFotoUrl.isBlank() ? null : req.profilFotoUrl.trim();
 
         if (req.dogumTarihi != null && !req.dogumTarihi.isBlank()) {
             try {

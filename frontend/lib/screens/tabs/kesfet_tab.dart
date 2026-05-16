@@ -1,5 +1,8 @@
+import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 
@@ -20,6 +23,7 @@ import '../saha_detay_screen.dart';
 import '../takim_ilanlari_screen.dart';
 import '../takim_ilani_olustur_screen.dart';
 import '../bildirimler_screen.dart';
+import '../saha_ekle_screen.dart';
 import '../../providers/bildirim_provider.dart';
 import '../../services/takim_ilani_service.dart';
 import '../../widgets/konum_secim_sheet.dart';
@@ -44,6 +48,12 @@ class _KesfetTabState extends State<KesfetTab> {
   List<TakimIlani> _takimIlanlari = [];
   bool _yukleniyor = true;
 
+  static const int _macSayfaBoyutu = 10;
+  int _macSayfaNo = 0;
+  bool _dahaFazlaMacVar = false;
+  bool _maclarYukleniyor = false;
+
+  bool _cevrimdisi = false;
   int _seciliFiltreIndex = 0;
   final _filtreler = ['Tümü', 'Sadece Açık', 'Eksik Arananlar', 'Rakip Arananlar', 'Sadece Sahalar'];
 
@@ -76,8 +86,13 @@ class _KesfetTabState extends State<KesfetTab> {
   }
 
   Future<void> _yukle() async {
-    setState(() => _yukleniyor = true);
-    final macRes = await _macService.acikMaclar();
+    setState(() {
+      _yukleniyor = true;
+      _macSayfaNo = 0;
+      _dahaFazlaMacVar = false;
+      _tumMaclar = [];
+    });
+    final macRes = await _macService.acikMaclar(page: 0, size: _macSayfaBoyutu);
     final sahaRes = await _sahaService.tumSahalar();
     final ilanRes = await _takimIlaniService.aktifIlanlar();
 
@@ -85,13 +100,22 @@ class _KesfetTabState extends State<KesfetTab> {
       final konumProvider = context.read<KonumProvider>();
       final il = (konumProvider.seciliIl ?? '').toLowerCase();
       final ilce = (konumProvider.seciliIlce ?? '').toLowerCase();
-      
+
+      final herseyCevrimdisi = !macRes.basarili && !sahaRes.basarili && !ilanRes.basarili;
+
+      if (herseyCevrimdisi) {
+        await _cachedenYukle();
+        return;
+      }
+
       setState(() {
         _yukleniyor = false;
-        
+        _cevrimdisi = false;
+
         // MAÇLAR
         if (macRes.basarili && macRes.veri != null) {
           final hepsi = macRes.veri!;
+          _dahaFazlaMacVar = hepsi.length >= _macSayfaBoyutu;
           _tumMaclar = hepsi.where((m) {
             final mIl = (m.il ?? '').toLowerCase();
             final mIlce = (m.ilce ?? '').toLowerCase();
@@ -99,8 +123,7 @@ class _KesfetTabState extends State<KesfetTab> {
             if (ilce.isEmpty) return mIl.contains(il);
             return mIl.contains(il) && mIlce.contains(ilce);
           }).toList();
-          
-          // Konum dışındaki maçları da "diğerleri" için sakla
+
           _digerMaclar = hepsi.where((m) => !_tumMaclar.contains(m)).take(10).toList();
         }
 
@@ -123,6 +146,87 @@ class _KesfetTabState extends State<KesfetTab> {
             if (ilce.isEmpty) return k.contains(il);
             return k.contains(il) && k.contains(ilce);
           }).toList();
+        }
+      });
+
+      _cacheyeKaydet(
+        macRes.veri ?? [],
+        sahaRes.veri ?? [],
+        ilanRes.veri ?? [],
+      );
+    }
+  }
+
+  Future<void> _cacheyeKaydet(List<Mac> maclar, List<Saha> sahalar, List<TakimIlani> ilanlar) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('cache_maclar', jsonEncode(maclar.map((m) => {
+        'id': m.id, 'macBasligi': m.macBasligi, 'macTarihi': m.macTarihi,
+        'baslangicSaati': m.baslangicSaati, 'bitisSaati': m.bitisSaati,
+        'format': m.format, 'maxOyuncuSayisi': m.maxOyuncuSayisi,
+        'mevcutOyuncuSayisi': m.mevcutOyuncuSayisi, 'macDurumu': m.macDurumu,
+        'olusturanId': m.olusturanId, 'sahaAdi': m.sahaAdi, 'il': m.il, 'ilce': m.ilce,
+        'macTipi': m.macTipi, 'seviye': m.seviye, 'ucretPerKisi': m.ucretPerKisi,
+      }).toList()));
+      await prefs.setString('cache_sahalar', jsonEncode(sahalar.map((s) => {
+        'id': s.id, 'sahaAdi': s.sahaAdi, 'adres': s.adres,
+        'sahaFormati': s.sahaFormati, 'saatlikUcret': s.saatlikUcret,
+        'puanOrtalamasi': s.puanOrtalamasi, 'yorumSayisi': s.yorumSayisi,
+        'fotografUrl': s.fotografUrl, 'kapaliMi': s.kapaliMi,
+      }).toList()));
+    } catch (_) {}
+  }
+
+  Future<void> _cachedenYukle() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final macJson = prefs.getString('cache_maclar');
+      final sahaJson = prefs.getString('cache_sahalar');
+      if (macJson != null && mounted) {
+        final maclar = (jsonDecode(macJson) as List).map((e) => Mac.fromJson(e as Map<String, dynamic>)).toList();
+        final sahalar = sahaJson != null
+            ? (jsonDecode(sahaJson) as List).map((e) => Saha.fromJson(e as Map<String, dynamic>)).toList()
+            : <Saha>[];
+        setState(() {
+          _yukleniyor = false;
+          _cevrimdisi = true;
+          _tumMaclar = maclar;
+          _populerSahalar = sahalar.take(5).toList();
+        });
+      } else if (mounted) {
+        setState(() => _yukleniyor = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _yukleniyor = false);
+    }
+  }
+
+  Future<void> _dahaFazlaYukle() async {
+    if (_maclarYukleniyor || !_dahaFazlaMacVar) return;
+    setState(() => _maclarYukleniyor = true);
+
+    final sonrakiSayfa = _macSayfaNo + 1;
+    final macRes = await _macService.acikMaclar(page: sonrakiSayfa, size: _macSayfaBoyutu);
+
+    if (mounted) {
+      final konumProvider = context.read<KonumProvider>();
+      final il = (konumProvider.seciliIl ?? '').toLowerCase();
+      final ilce = (konumProvider.seciliIlce ?? '').toLowerCase();
+
+      setState(() {
+        _maclarYukleniyor = false;
+        if (macRes.basarili && macRes.veri != null) {
+          final yeni = macRes.veri!;
+          _dahaFazlaMacVar = yeni.length >= _macSayfaBoyutu;
+          _macSayfaNo = sonrakiSayfa;
+          final filtrelenmis = yeni.where((m) {
+            final mIl = (m.il ?? '').toLowerCase();
+            final mIlce = (m.ilce ?? '').toLowerCase();
+            if (il.isEmpty) return true;
+            if (ilce.isEmpty) return mIl.contains(il);
+            return mIl.contains(il) && mIlce.contains(ilce);
+          }).toList();
+          _tumMaclar = [..._tumMaclar, ...filtrelenmis];
         }
       });
     }
@@ -153,6 +257,24 @@ class _KesfetTabState extends State<KesfetTab> {
             padding: const EdgeInsets.only(bottom: 12),
             child: _buildFilterChips(),
           )),
+
+          if (_cevrimdisi)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.lightOrange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.lightOrange.withOpacity(0.2)),
+                ),
+                child: const Row(children: [
+                  Icon(Icons.wifi_off_rounded, color: AppTheme.lightOrange, size: 16),
+                  SizedBox(width: 8),
+                  Text('Çevrimdışı — önbellek gösteriliyor', style: TextStyle(fontSize: 12, color: AppTheme.lightOrange)),
+                ]),
+              ),
+            ),
 
           if (_yukleniyor)
             _buildShimmerLoading()
@@ -209,33 +331,50 @@ class _KesfetTabState extends State<KesfetTab> {
 
 
   Widget _buildFilterChips() {
+    final filtrelerWithIcons = [
+      ('Tümü', Icons.apps_rounded),
+      ('Sadece Açık', Icons.check_circle_outline_rounded),
+      ('Eksik Arananlar', Icons.person_add_outlined),
+      ('Rakip Arananlar', Icons.groups_outlined),
+      ('Sadece Sahalar', Icons.stadium_outlined),
+    ];
     return SizedBox(
-      height: 36,
+      height: 38,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _filtreler.length,
+        itemCount: filtrelerWithIcons.length,
         itemBuilder: (context, index) {
           final isSelected = _seciliFiltreIndex == index;
+          final item = filtrelerWithIcons[index];
           return GestureDetector(
             onTap: () => setState(() => _seciliFiltreIndex = index),
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: isSelected ? AppTheme.primaryGreen : AppTheme.cardDark,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: isSelected ? AppTheme.primaryGreen : Colors.white.withValues(alpha: 0.1)),
-              ),
-              child: Text(
-                _filtreler[index],
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected ? AppTheme.backgroundDark : AppTheme.textSecondary,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSelected ? AppTheme.primaryGreen : Colors.white.withValues(alpha: 0.08),
                 ),
+                boxShadow: isSelected ? [BoxShadow(color: AppTheme.primaryGreen.withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 2))] : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(item.$2, size: 13,
+                    color: isSelected ? AppTheme.backgroundDark : AppTheme.textSecondary.withValues(alpha: 0.6)),
+                  const SizedBox(width: 5),
+                  Text(item.$1, style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? AppTheme.backgroundDark : AppTheme.textSecondary,
+                  )),
+                ],
               ),
             ),
           );
@@ -288,49 +427,70 @@ class _KesfetTabState extends State<KesfetTab> {
     final userId = auth.currentUserId;
     if (userId == null || _tumMaclar.isEmpty) return const SizedBox.shrink();
 
-    final katildigimMaclar = _tumMaclar.where((m) => m.olusturanId == userId).toList();
+    final katildigimMaclar = _tumMaclar.where((m) {
+      if (m.olusturanId == userId) return true;
+      if (m.katilimcilar != null) return m.katilimcilar!.any((k) => k.id == userId);
+      return false;
+    }).toList();
     if (katildigimMaclar.isEmpty) return const SizedBox.shrink();
 
     final siradaki = katildigimMaclar.first;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
       child: GestureDetector(
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MacDetayScreen(macId: siradaki.id))),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [AppTheme.accentCoral.withValues(alpha: 0.15), AppTheme.accentCoral.withValues(alpha: 0.05)],
+              colors: [const Color(0xFF3D1A0A), AppTheme.accentCoral.withValues(alpha: 0.08)],
+              begin: Alignment.centerLeft, end: Alignment.centerRight,
             ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppTheme.accentCoral.withValues(alpha: 0.3)),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppTheme.accentCoral.withValues(alpha: 0.25)),
           ),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.accentCoral,
+                  gradient: const LinearGradient(colors: [Color(0xFFFF8A80), AppTheme.accentCoral]),
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: AppTheme.accentCoral.withValues(alpha: 0.3), blurRadius: 8)],
+                  boxShadow: [BoxShadow(color: AppTheme.accentCoral.withValues(alpha: 0.35), blurRadius: 10)],
                 ),
-                child: const Icon(Icons.timer_outlined, color: Colors.white, size: 24),
+                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Sıradaki Maçına Hazır Mısın?', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.accentCoral)),
-                    const SizedBox(height: 4),
-                    Text(siradaki.macBasligi, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
-                    const SizedBox(height: 2),
-                    Text('${siradaki.macTarihi} - ${siradaki.baslangicSaati}', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withValues(alpha: 0.8))),
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: AppTheme.accentCoral.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+                        child: const Text('BUGÜN', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppTheme.accentCoral, letterSpacing: 0.5)),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(siradaki.baslangicSaati,
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.textSecondary.withValues(alpha: 0.7))),
+                    ]),
+                    const SizedBox(height: 3),
+                    Text(siradaki.macBasligi,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: AppTheme.accentCoral),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentCoral.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.chevron_right_rounded, color: AppTheme.accentCoral, size: 18),
+              ),
             ],
           ),
         ),
@@ -345,159 +505,177 @@ class _KesfetTabState extends State<KesfetTab> {
   Widget _buildHeader(dynamic user) {
     final hour = DateTime.now().hour;
     String greeting;
-    IconData greetIcon;
-    if (hour < 12) {
+    String greetEmoji;
+    if (hour < 6) {
+      greeting = 'Gece geç';
+      greetEmoji = '🌙';
+    } else if (hour < 12) {
       greeting = 'Günaydın';
-      greetIcon = Icons.wb_sunny_rounded;
+      greetEmoji = '☀️';
     } else if (hour < 18) {
       greeting = 'İyi günler';
-      greetIcon = Icons.wb_cloudy_rounded;
+      greetEmoji = '⛅';
     } else {
       greeting = 'İyi akşamlar';
-      greetIcon = Icons.nights_stay_rounded;
+      greetEmoji = '🌙';
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Stack(
+      children: [
+        // Arka plan dekorasyon
+        Positioned.fill(
+          child: ClipRect(
+            child: CustomPaint(painter: _HeaderFieldPainter()),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Sol: selamlama
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(greetIcon, size: 16, color: AppTheme.lightOrange),
-                        const SizedBox(width: 6),
-                        Text(greeting,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppTheme.textSecondary.withValues(alpha: 0.7),
-                            fontWeight: FontWeight.w500,
-                          )),
+                        Row(children: [
+                          Text(greetEmoji, style: const TextStyle(fontSize: 15)),
+                          const SizedBox(width: 6),
+                          Text(greeting,
+                            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.65), fontWeight: FontWeight.w500)),
+                        ]),
+                        const SizedBox(height: 3),
+                        ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [AppTheme.textPrimary, Color(0xFFB0BEC5)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ).createShader(bounds),
+                          child: Text(
+                            user?.adSoyad ?? 'Kullanıcı',
+                            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5),
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      user?.adSoyad ?? 'Kullanıcı',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Sağ: bildirim
-              GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BildirimlerScreen())),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppTheme.cardDark,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
                   ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      const Icon(Icons.notifications_none_rounded, color: AppTheme.textSecondary, size: 22),
-                      Consumer<BildirimProvider>(
-                        builder: (context, bp, _) {
-                          if (bp.okunmamisSayisi == 0) return const SizedBox.shrink();
-                          return Positioned(
-                            top: 10, right: 10,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: AppTheme.accentCoral, shape: BoxShape.circle,
+                  const SizedBox(width: 12),
+                  // Bildirim butonu
+                  GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BildirimlerScreen())),
+                    child: Consumer<BildirimProvider>(
+                      builder: (context, bp, _) {
+                        final hasBadge = bp.okunmamisSayisi > 0;
+                        return Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: hasBadge ? AppTheme.accentCoral.withValues(alpha: 0.12) : AppTheme.cardDark,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: hasBadge ? AppTheme.accentCoral.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.06)),
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Icon(
+                                hasBadge ? Icons.notifications_rounded : Icons.notifications_none_rounded,
+                                color: hasBadge ? AppTheme.accentCoral : AppTheme.textSecondary,
+                                size: 22,
                               ),
-                              constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
-                              child: Text(
-                                bp.okunmamisSayisi > 9 ? '9+' : '${bp.okunmamisSayisi}',
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
-                              ),
-                            ),
-                          );
-                        },
+                              if (hasBadge)
+                                Positioned(
+                                  top: 8, right: 8,
+                                  child: Container(
+                                    width: 8, height: 8,
+                                    decoration: const BoxDecoration(color: AppTheme.accentCoral, shape: BoxShape.circle),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // İstatistik satırı
+              Builder(builder: (context) {
+                final kp = context.watch<KonumProvider>();
+                final konum = kp.konumSecildi ? (kp.seciliIlce ?? kp.seciliIl ?? '') : '';
+                return Row(
+                  children: [
+                    _statChip(
+                      value: '${_tumMaclar.length}',
+                      label: 'Maç',
+                      icon: Icons.sports_soccer_rounded,
+                      color: AppTheme.primaryGreen,
+                    ),
+                    const SizedBox(width: 10),
+                    _statChip(
+                      value: '${_takimIlanlari.length}',
+                      label: 'İlan',
+                      icon: Icons.groups_rounded,
+                      color: AppTheme.accentPurple,
+                    ),
+                    const SizedBox(width: 10),
+                    _statChip(
+                      value: '${_populerSahalar.length}',
+                      label: 'Saha',
+                      icon: Icons.stadium_rounded,
+                      color: AppTheme.accentBlue,
+                    ),
+                    if (konum.isNotEmpty) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.cardDark,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.location_on_rounded, size: 12, color: AppTheme.primaryGreen),
+                              const SizedBox(width: 4),
+                              Flexible(child: Text(konum,
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary.withValues(alpha: 0.8)),
+                                maxLines: 1, overflow: TextOverflow.ellipsis)),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
-                  ),
-                ),
-              ),
+                  ],
+                );
+              }),
             ],
           ),
-          const SizedBox(height: 16),
-          // "Bugün" paneli
-          GestureDetector(
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tüm detaylar için alt menüyü kullanabilirsiniz.'))),
-            child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.primaryGreen.withValues(alpha: 0.12), AppTheme.accentBlue.withValues(alpha: 0.04)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.primaryGreen.withValues(alpha: 0.1)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryGreen.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.radar_rounded, size: 20, color: AppTheme.primaryGreen),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Bugünün Özeti', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-                      const SizedBox(height: 4),
-                      Builder(
-                        builder: (context) {
-                          final kp = context.watch<KonumProvider>();
-                          final konum = kp.konumSecildi ? (kp.seciliIlce ?? kp.seciliIl ?? 'Konum') : 'Yakınında';
-                          
-                          if (_tumMaclar.isEmpty && _takimIlanlari.isEmpty && _populerSahalar.isEmpty) {
-                            return Text(
-                              'Şu an bu bölgede hareketlilik yok. İlk maçı kurup insanları davet etmeye ne dersin?',
-                              style: TextStyle(fontSize: 11, color: AppTheme.primaryGreen.withValues(alpha: 0.9), fontWeight: FontWeight.w600, height: 1.3),
-                            );
-                          }
+        ),
+      ],
+    );
+  }
 
-                          return Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(text: '$konum çevresinde '),
-                                TextSpan(text: '${_tumMaclar.length} maç', style: const TextStyle(fontWeight: FontWeight.w800, color: AppTheme.primaryGreen)),
-                                const TextSpan(text: ', '),
-                                TextSpan(text: '${_takimIlanlari.length} ilan', style: const TextStyle(fontWeight: FontWeight.w800, color: AppTheme.primaryGreen)),
-                                const TextSpan(text: ' ve '),
-                                TextSpan(text: '${_populerSahalar.length} saha', style: const TextStyle(fontWeight: FontWeight.w800, color: AppTheme.primaryGreen)),
-                              ],
-                            ),
-                            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.8), height: 1.3),
-                          );
-                        }
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          ), // end GestureDetector
+  Widget _statChip({required String value, required String label, required IconData icon, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: color)),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: color.withValues(alpha: 0.6))),
         ],
       ),
     );
@@ -509,83 +687,88 @@ class _KesfetTabState extends State<KesfetTab> {
 
   Widget _buildKonumVeArama() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Konum seçici (Tek satır, daha kompakt)
-          GestureDetector(
-            onTap: _konumSec,
-            child: Builder(
-              builder: (context) {
-                final kp = context.watch<KonumProvider>();
-                return Row(
-                  children: [
-                    const Icon(Icons.location_on_rounded, size: 16, color: AppTheme.primaryGreen),
-                    const SizedBox(width: 6),
-                    Text(
-                      kp.konumEtiketi ?? 'Konum seç',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: kp.konumSecildi ? AppTheme.textPrimary : AppTheme.primaryGreen,
+          // Konum + Temizle satırı
+          Builder(builder: (context) {
+            final kp = context.watch<KonumProvider>();
+            return GestureDetector(
+              onTap: _konumSec,
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryGreen.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.location_on_rounded, size: 12, color: AppTheme.primaryGreen),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  kp.konumEtiketi ?? 'Konum seç',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                    color: kp.konumSecildi ? AppTheme.textPrimary : AppTheme.primaryGreen),
+                ),
+                const SizedBox(width: 3),
+                Icon(Icons.keyboard_arrow_down_rounded, size: 15, color: AppTheme.textSecondary.withValues(alpha: 0.6)),
+                const Spacer(),
+                if (kp.konumSecildi)
+                  GestureDetector(
+                    onTap: () { context.read<KonumProvider>().konumTemizle(); _yukle(); },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.errorRed.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      child: const Text('Temizle', style: TextStyle(fontSize: 11, color: AppTheme.errorRed, fontWeight: FontWeight.w600)),
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppTheme.textSecondary),
-                    const Spacer(),
-                    if (kp.konumSecildi)
-                      GestureDetector(
-                        onTap: () {
-                          context.read<KonumProvider>().konumTemizle();
-                          _yukle();
-                        },
-                        child: const Text('Temizle', style: TextStyle(fontSize: 11, color: AppTheme.errorRed, fontWeight: FontWeight.w600)),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Arama (Daha büyük ve baskın)
+                  ),
+              ]),
+            );
+          }),
+          const SizedBox(height: 10),
+          // Arama kutusu
           GestureDetector(
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AramaScreen())),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
               decoration: BoxDecoration(
                 color: AppTheme.cardDark,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  )
-                ],
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 4))],
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.search_rounded, size: 24, color: AppTheme.textSecondary),
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(color: AppTheme.cardDarkElevated, borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.search_rounded, size: 18, color: AppTheme.textSecondary),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Saha veya maç ara...', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textHint)),
-                        const SizedBox(height: 2),
-                        Text('Takım ve oyuncular', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.5))),
+                        const Text('Saha veya maç ara...', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textHint)),
+                        Text('Takım, oyuncu, saha', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withValues(alpha: 0.45))),
                       ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryGreen,
-                      borderRadius: BorderRadius.circular(12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(gradient: AppTheme.buttonGradient, borderRadius: BorderRadius.circular(10)),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Ara', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.backgroundDark)),
+                        SizedBox(width: 4),
+                        Icon(Icons.arrow_forward_rounded, size: 13, color: AppTheme.backgroundDark),
+                      ],
                     ),
-                    child: const Icon(Icons.arrow_forward_rounded, size: 16, color: AppTheme.backgroundDark),
                   ),
                 ],
               ),
@@ -603,9 +786,15 @@ class _KesfetTabState extends State<KesfetTab> {
   Widget _buildQuickActions(bool isIsletme) {
     if (isIsletme) {
       final actions = [
-        _QA('Saha Ekle', Icons.add_business_rounded, AppTheme.primaryGreen, null),
-        _QA('Rezervasyonlar', Icons.calendar_month_rounded, AppTheme.accentPurple, null),
-        _QA('İstatistik', Icons.bar_chart_rounded, AppTheme.accentBlue, null),
+        _QA('Saha Ekle', Icons.add_business_rounded, AppTheme.primaryGreen,
+            () async {
+          final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const SahaEkleScreen()));
+          if (result == true) _yukle();
+        }),
+        _QA('Rezervasyonlar', Icons.calendar_month_rounded, AppTheme.accentPurple,
+            () => _isletmeRezervasyonlarDialog()),
+        _QA('İstatistik', Icons.bar_chart_rounded, AppTheme.accentBlue,
+            () => _isletmeIstatistikDialog()),
       ];
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
@@ -645,56 +834,96 @@ class _KesfetTabState extends State<KesfetTab> {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
         child: Row(
           children: [
-            Expanded(
-              child: _buildActionCard(
-                title: 'Maç Bul',
-                subtitle: 'Takım veya Oyuncu',
-                icon: Icons.person_search_rounded,
-                color: AppTheme.accentPurple,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AramaScreen())),
+            Expanded(child: _buildActionCard(
+              title: 'Maç Bul',
+              subtitle: 'Takım veya Oyuncu',
+              icon: Icons.person_search_rounded,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1A1040), Color(0xFF2D1B69)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
               ),
-            ),
+              accentColor: AppTheme.accentPurple,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AramaScreen())),
+            )),
             const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionCard(
-                title: 'Maç Oluştur',
-                subtitle: 'Saha ve kadro',
-                icon: Icons.add_circle_rounded,
-                color: AppTheme.primaryGreen,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MacOlusturScreen())),
+            Expanded(child: _buildActionCard(
+              title: 'Maç Oluştur',
+              subtitle: 'Saha ve kadro',
+              icon: Icons.add_circle_rounded,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0A2016), Color(0xFF0D2E1C)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
               ),
-            ),
+              accentColor: AppTheme.primaryGreen,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MacOlusturScreen())),
+            )),
           ],
         ),
       );
     }
   }
 
-  Widget _buildActionCard({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
+  Widget _buildActionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required LinearGradient gradient,
+    required Color accentColor,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        height: 140,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+          boxShadow: [BoxShadow(color: accentColor.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, 6))],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
+            // Arka plan daire dekorasyon
+            Positioned(
+              right: -20, top: -20,
+              child: Container(
+                width: 90, height: 90,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.07),
+                  shape: BoxShape.circle,
+                ),
               ),
-              child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(height: 16),
-            Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
-            const SizedBox(height: 4),
-            Text(subtitle, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.textSecondary)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(icon, color: accentColor, size: 22),
+                ),
+                const Spacer(),
+                Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Expanded(child: Text(subtitle, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary.withValues(alpha: 0.6)))),
+                    Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.arrow_forward_rounded, size: 12, color: accentColor),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -713,21 +942,19 @@ class _KesfetTabState extends State<KesfetTab> {
     VoidCallback? onTumunuGor,
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 12),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
       child: Row(
         children: [
           Container(
-            width: 30, height: 30,
+            width: 32, height: 32,
             decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
+              color: iconColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, size: 16, color: iconColor),
           ),
           const SizedBox(width: 10),
-          Text(title, style: const TextStyle(
-            fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
-          )),
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
           if (badge != null) ...[
             const SizedBox(width: 8),
             Container(
@@ -736,24 +963,25 @@ class _KesfetTabState extends State<KesfetTab> {
                 color: iconColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(badge, style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w700, color: iconColor,
-              )),
+              child: Text(badge, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: iconColor)),
             ),
           ],
           const Spacer(),
           if (onTumunuGor != null)
             GestureDetector(
               onTap: onTumunuGor,
-              child: Row(children: [
-                Text('Tümü', style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600,
-                  color: iconColor.withValues(alpha: 0.7),
-                )),
-                const SizedBox(width: 4),
-                Icon(Icons.arrow_forward_ios_rounded, size: 12,
-                  color: iconColor.withValues(alpha: 0.5)),
-              ]),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(children: [
+                  Text('Tümü', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: iconColor)),
+                  const SizedBox(width: 3),
+                  Icon(Icons.arrow_forward_ios_rounded, size: 10, color: iconColor),
+                ]),
+              ),
             ),
         ],
       ),
@@ -782,11 +1010,29 @@ class _KesfetTabState extends State<KesfetTab> {
         if (digerleri.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.only(top: 24, bottom: 12, left: 20),
-            child: Text('Diğer Yaklaşan Maçlar (${digerleri.length})', 
+            child: Text('Diğer Yaklaşan Maçlar (${digerleri.length})',
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
           ),
           _buildMaclarHorizontalList(digerleri),
-        ]
+        ],
+        if (_dahaFazlaMacVar || _maclarYukleniyor)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: _maclarYukleniyor
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryGreen, strokeWidth: 2))
+                : OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryGreen,
+                      side: BorderSide(color: AppTheme.primaryGreen.withValues(alpha: 0.4)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      minimumSize: const Size(double.infinity, 0),
+                    ),
+                    onPressed: _dahaFazlaYukle,
+                    icon: const Icon(Icons.expand_more_rounded, size: 20),
+                    label: const Text('Daha Fazla Maç Yükle', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  ),
+          ),
       ]),
     );
   }
@@ -1212,92 +1458,91 @@ class _KesfetTabState extends State<KesfetTab> {
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildSahalarGrid() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        children: [
-          for (int i = 0; i < _filtrelenmisSahalar.length; i += 2)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  Expanded(child: _buildSahaKart(_filtrelenmisSahalar[i])),
-                  const SizedBox(width: 10),
-                  if (i + 1 < _filtrelenmisSahalar.length)
-                    Expanded(child: _buildSahaKart(_filtrelenmisSahalar[i + 1]))
-                  else
-                    const Expanded(child: SizedBox()),
-                ],
-              ),
-            ),
-        ],
+    return SizedBox(
+      height: 148,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _filtrelenmisSahalar.length,
+        itemBuilder: (_, i) => _buildSahaKart(_filtrelenmisSahalar[i]),
       ),
     );
   }
 
   Widget _buildSahaKart(Saha saha) {
+    final rating = saha.puanOrtalamasi;
     return GestureDetector(
-      onTap: () => Navigator.push(context,
-        MaterialPageRoute(builder: (_) => SahaDetayScreen(sahaId: saha.id))),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SahaDetayScreen(sahaId: saha.id))),
       child: Container(
-        height: 130,
+        width: 200,
+        margin: const EdgeInsets.only(right: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: AppTheme.cardDark,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.accentBlue.withValues(alpha: 0.06)),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppTheme.accentBlue.withValues(alpha: 0.1)),
+          boxShadow: [BoxShadow(color: AppTheme.accentBlue.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // İkon + isim
             Row(
               children: [
                 Container(
-                  width: 32, height: 32,
+                  width: 36, height: 36,
                   decoration: BoxDecoration(
-                    gradient: AppTheme.glassGradient,
-                    borderRadius: BorderRadius.circular(10),
+                    color: AppTheme.accentBlue.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(11),
                   ),
-                  child: const Icon(Icons.stadium_rounded, color: AppTheme.primaryGreen, size: 16),
+                  child: const Icon(Icons.stadium_rounded, color: AppTheme.accentBlue, size: 18),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(saha.sahaAdi, style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
-                  ), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Adres
-            Row(
-              children: [
-                Icon(Icons.location_on_outlined, size: 12,
-                  color: AppTheme.textSecondary.withValues(alpha: 0.4)),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(saha.adres, style: TextStyle(
-                    fontSize: 10, color: AppTheme.textSecondary.withValues(alpha: 0.5),
-                  ), maxLines: 2, overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
-            const Spacer(),
-            // Puan + Fiyat
-            Row(
-              children: [
-                const Icon(Icons.star_rounded, color: AppTheme.amber, size: 14),
-                const SizedBox(width: 3),
-                Text(saha.puanOrtalamasi.toStringAsFixed(1), style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
-                )),
                 const Spacer(),
-                Text('₺${saha.saatlikUcret.toStringAsFixed(0)}/s', style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w800, color: AppTheme.primaryGreen,
-                )),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.star_rounded, size: 11, color: AppTheme.amber),
+                      const SizedBox(width: 3),
+                      Text(rating.toStringAsFixed(1),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.amber)),
+                    ],
+                  ),
+                ),
               ],
             ),
+            const SizedBox(height: 10),
+            Text(saha.sahaAdi,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 3),
+            Row(children: [
+              Icon(Icons.location_on_outlined, size: 11, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
+              const SizedBox(width: 3),
+              Expanded(child: Text(saha.adres,
+                style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+                maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ]),
+            const Spacer(),
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentBlue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(saha.sahaFormati, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.accentBlue)),
+              ),
+              const Spacer(),
+              Text('₺${saha.saatlikUcret.toStringAsFixed(0)}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppTheme.primaryGreen)),
+              Text('/s', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withValues(alpha: 0.5))),
+            ]),
           ],
         ),
       ),
@@ -1396,6 +1641,107 @@ class _KesfetTabState extends State<KesfetTab> {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  // İŞLETME DİYALOGLARI
+  // ═══════════════════════════════════════════════════════════════
+
+  void _isletmeRezervasyonlarDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.calendar_month_rounded, color: AppTheme.accentPurple, size: 22),
+          SizedBox(width: 10),
+          Text('Rezervasyonlar', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.accentPurple.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(children: [
+                Icon(Icons.event_available_rounded, size: 48, color: AppTheme.accentPurple.withValues(alpha: 0.4)),
+                const SizedBox(height: 12),
+                const Text('Rezervasyon sistemi yakında!', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                const SizedBox(height: 6),
+                Text('Sahanızı kullanıcılar şu an maç oluşturarak rezerve edebilir.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withValues(alpha: 0.8))),
+              ]),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentPurple, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tamam'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _isletmeIstatistikDialog() {
+    final toplamMac = _tumMaclar.length;
+    final toplamSaha = _populerSahalar.length;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.bar_chart_rounded, color: AppTheme.accentBlue, size: 22),
+          SizedBox(width: 10),
+          Text('İstatistik', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _istatistikSatir('Bölgedeki Aktif Maç', '$toplamMac', Icons.sports_soccer_rounded, AppTheme.primaryGreen),
+            const SizedBox(height: 12),
+            _istatistikSatir('Bölgedeki Saha', '$toplamSaha', Icons.stadium_rounded, AppTheme.accentBlue),
+            const SizedBox(height: 12),
+            _istatistikSatir('Aktif Takım İlanı', '${_takimIlanlari.length}', Icons.groups_rounded, AppTheme.accentPurple),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Kapat', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _istatistikSatir(String label, String deger, IconData icon, Color renk) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: renk.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: renk.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(color: renk.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: renk, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withValues(alpha: 0.8)))),
+          Text(deger, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: renk)),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   // KONUM FİLTRELEME
   // ═══════════════════════════════════════════════════════════════
 
@@ -1467,4 +1813,28 @@ class _QA {
   final Color color;
   final VoidCallback? onTap;
   _QA(this.label, this.icon, this.color, this.onTap);
+}
+
+class _HeaderFieldPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF00BFA5).withOpacity(0.04)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+
+    // büyük daire
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(size.width * 1.1, size.height * 0.5), radius: size.height * 1.1),
+      math.pi * 0.55, math.pi * 0.9, false, paint,
+    );
+    // küçük daire
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(size.width * 1.1, size.height * 0.5), radius: size.height * 0.55),
+      math.pi * 0.45, math.pi, false, paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -177,4 +177,38 @@ class AppTheme {
       ),
     );
   }
+
+  static ThemeData get lightTheme {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: const Color(0xFFF5F7FA),
+      colorScheme: const ColorScheme.light(
+        primary: primaryGreen,
+        secondary: accentPurple,
+        surface: Colors.white,
+        error: errorRed,
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        foregroundColor: Color(0xFF1A1A2E),
+      ),
+      cardColor: Colors.white,
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryGreen,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 56),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          elevation: 0,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: primaryGreen),
+      ),
+    );
+  }
 }

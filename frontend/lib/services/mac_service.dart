@@ -9,9 +9,10 @@ class MacService {
 
   MacService(this._apiClient);
 
-  Future<ApiResponse<List<Mac>>> acikMaclar() async {
+  Future<ApiResponse<List<Mac>>> acikMaclar({int page = 0, int size = 0}) async {
     try {
-      final response = await _apiClient.dio.get(ApiConstants.maclar);
+      final queryParams = size > 0 ? {'page': page, 'size': size} : null;
+      final response = await _apiClient.dio.get(ApiConstants.maclar, queryParameters: queryParams);
       return _parseListResponse(response);
     } on DioException catch (e) {
       return _handleError(e);
@@ -35,6 +36,15 @@ class MacService {
   Future<ApiResponse<List<Mac>>> benimMaclarim() async {
     try {
       final response = await _apiClient.dio.get(ApiConstants.benimMaclarim);
+      return _parseListResponse(response);
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<List<Mac>>> gecmisMaclarim() async {
+    try {
+      final response = await _apiClient.dio.get(ApiConstants.benimGecmisMaclarim);
       return _parseListResponse(response);
     } on DioException catch (e) {
       return _handleError(e);
@@ -117,6 +127,36 @@ class MacService {
         queryParameters: {'q': query},
       );
       return _parseListResponse(response);
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<Mac>> skorGir(String macId, int takim1, int takim2) async {
+    try {
+      final response = await _apiClient.dio.post(
+        ApiConstants.macSkor(macId),
+        data: {'takim1Skor': takim1, 'takim2Skor': takim2},
+      );
+      final data = response.data;
+      return ApiResponse(
+        basarili: data['basarili'] ?? false,
+        mesaj: data['mesaj'] ?? '',
+        veri: data['veri'] != null ? Mac.fromJson(data['veri']) : null,
+      );
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<void>> oyuncuPuanla(String macId, String hedefKullaniciId, int puan) async {
+    try {
+      final response = await _apiClient.dio.post(
+        ApiConstants.macPuanla(macId),
+        data: {'hedefKullaniciId': hedefKullaniciId, 'puan': puan},
+      );
+      final data = response.data;
+      return ApiResponse(basarili: data['basarili'] ?? false, mesaj: data['mesaj'] ?? '');
     } on DioException catch (e) {
       return _handleError(e);
     }

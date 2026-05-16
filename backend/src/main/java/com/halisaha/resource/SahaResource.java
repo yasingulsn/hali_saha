@@ -3,6 +3,8 @@ package com.halisaha.resource;
 import com.halisaha.dto.ApiResponse;
 import com.halisaha.dto.SahaRequest;
 import com.halisaha.dto.SahaResponse;
+import com.halisaha.dto.SahaYorumRequest;
+import com.halisaha.dto.SahaYorumResponse;
 import com.halisaha.service.SahaService;
 import jakarta.annotation.security.PermitAll;
 import jakarta.annotation.security.RolesAllowed;
@@ -29,8 +31,12 @@ public class SahaResource {
 
     @GET
     @PermitAll
-    public Response tumSahalar() {
-        List<SahaResponse> sahalar = sahaService.tumSahalar();
+    public Response tumSahalar(
+            @QueryParam("page") @DefaultValue("0") int page,
+            @QueryParam("size") @DefaultValue("0") int size) {
+        List<SahaResponse> sahalar = size > 0
+                ? sahaService.tumSahalarPaged(page, size)
+                : sahaService.tumSahalar();
         return Response.ok(ApiResponse.basarili("Sahalar listelendi", sahalar)).build();
     }
 
@@ -67,6 +73,24 @@ public class SahaResource {
         UUID isletmeId = UUID.fromString(jwt.getSubject());
         SahaResponse saha = sahaService.sahaGuncelle(id, request, isletmeId);
         return Response.ok(ApiResponse.basarili("Saha güncellendi", saha)).build();
+    }
+
+    @GET
+    @Path("/{id}/yorumlar")
+    @PermitAll
+    public Response sahaYorumlari(@PathParam("id") UUID id) {
+        List<SahaYorumResponse> yorumlar = sahaService.sahaYorumlari(id);
+        return Response.ok(ApiResponse.basarili("Saha yorumları", yorumlar)).build();
+    }
+
+    @POST
+    @Path("/{id}/yorum")
+    @RolesAllowed("KULLANICI")
+    public Response yorumEkle(@PathParam("id") UUID id, @Valid SahaYorumRequest request) {
+        UUID kullaniciId = UUID.fromString(jwt.getSubject());
+        SahaYorumResponse yorum = sahaService.yorumEkle(id, request, kullaniciId);
+        return Response.status(Response.Status.CREATED)
+                .entity(ApiResponse.basarili("Yorumunuz eklendi", yorum)).build();
     }
 
     @GET

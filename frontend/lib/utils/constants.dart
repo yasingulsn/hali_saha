@@ -25,10 +25,23 @@ class ApiConstants {
   // Maç endpoints
   static const String maclar = '/api/maclar';
   static const String benimMaclarim = '/api/maclar/benim';
+  static const String benimGecmisMaclarim = '/api/maclar/benim/gecmis';
   static const String maclarAra = '/api/maclar/ara';
+  static String macPuanla(String macId) => '/api/maclar/$macId/puanla';
+  static String macSkor(String macId) => '/api/maclar/$macId/skor';
 
   // Arama endpoint
   static const String birlesikArama = '/api/arama';
+
+  // Rezervasyon endpoints
+  static const String rezervasyonlar = '/api/rezervasyonlar';
+  static const String benimRezervasyonlarim = '/api/rezervasyonlar/benim';
+  static const String isletmeRezervasyonlari = '/api/rezervasyonlar/isletme';
+  static String sahaRezervasyonlari(String sahaId) => '/api/rezervasyonlar/saha/$sahaId';
+  static String sahaGunlukRezervasyonlar(String sahaId) => '/api/rezervasyonlar/saha/$sahaId/gun';
+  static String rezervasyonIptal(String id) => '/api/rezervasyonlar/$id/iptal';
+  static String rezervasyonOnayla(String id) => '/api/rezervasyonlar/$id/onayla';
+  static String rezervasyonReddet(String id) => '/api/rezervasyonlar/$id/reddet';
 
   // Bildirim endpoints
   static const String bildirimler = '/api/bildirimler';

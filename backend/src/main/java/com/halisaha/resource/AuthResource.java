@@ -28,6 +28,9 @@ public class AuthResource {
     com.halisaha.service.SifreSifirlamaService sifreSifirlamaService;
 
     @Inject
+    com.halisaha.service.EmailDogrulamaService emailDogrulamaService;
+
+    @Inject
     JsonWebToken jwt;
 
     @Context
@@ -175,6 +178,42 @@ public class AuthResource {
                     .entity(ApiResponse.hata("Konum güncellenirken hata: " + e.getMessage()))
                     .build();
         }
+    }
+
+    // ─── EMAIL DOĞRULAMA ─────────────────────────────────────────
+
+    @POST
+    @Path("/email-dogrulama-gonder")
+    @RolesAllowed({"KULLANICI"})
+    public Response emailDogrulamaGonder() {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        emailDogrulamaService.dogrulamaMailiGonder(userId);
+        return Response.ok(ApiResponse.basarili("Doğrulama kodu gönderildi")).build();
+    }
+
+    @POST
+    @Path("/email-dogrula")
+    @RolesAllowed({"KULLANICI"})
+    public Response emailDogrula(@QueryParam("token") String token) {
+        if (token == null || token.isBlank()) {
+            return Response.status(400).entity(ApiResponse.hata("Token gerekli")).build();
+        }
+        UUID userId = UUID.fromString(jwt.getSubject());
+        emailDogrulamaService.emailDogrula(userId, token);
+        return Response.ok(ApiResponse.basarili("Email başarıyla doğrulandı")).build();
+    }
+
+    // ─── PUBLIC PROFİL ───────────────────────────────────────────
+
+    @GET
+    @Path("/kullanici/{id}")
+    @PermitAll
+    public Response kullaniciPublicProfil(@PathParam("id") UUID id) {
+        com.halisaha.entity.Kullanici k = com.halisaha.entity.Kullanici.findById(id);
+        if (k == null) throw new AuthException("Kullanıcı bulunamadı", 404);
+        long toplamMac = com.halisaha.entity.MacKatilimci.count("kullaniciId = ?1 AND katilimDurumu = 'ONAYLANDI'", id);
+        return Response.ok(ApiResponse.basarili("Kullanıcı profili",
+                KullaniciProfilResponse.from(k, toplamMac))).build();
     }
 
     // ─── YARDIMCI ───────────────────────────────────────────────

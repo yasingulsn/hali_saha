@@ -32,6 +32,7 @@ class ProfilService {
     String? dogumTarihi,
     String? il,
     String? ilce,
+    String? profilFotoUrl,
   }) async {
     try {
       final response = await _apiClient.dio.put(
@@ -43,6 +44,7 @@ class ProfilService {
           'dogumTarihi': dogumTarihi,
           'il': il,
           'ilce': ilce,
+          if (profilFotoUrl != null) 'profilFotoUrl': profilFotoUrl,
         },
       );
 

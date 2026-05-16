@@ -18,6 +18,7 @@ public class ProfilResponse {
     public String hesapDurumu;
     public String il;
     public String ilce;
+    public Boolean emailDogrulanmis;
 
     // İstatistikler
     public long toplamMacSayisi;       // Katıldığı maçlar

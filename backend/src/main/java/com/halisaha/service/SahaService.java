@@ -2,8 +2,11 @@ package com.halisaha.service;
 
 import com.halisaha.dto.SahaRequest;
 import com.halisaha.dto.SahaResponse;
+import com.halisaha.dto.SahaYorumRequest;
+import com.halisaha.dto.SahaYorumResponse;
 import com.halisaha.entity.HaliSaha;
 import com.halisaha.entity.Isletme;
+import com.halisaha.entity.SahaYorum;
 import com.halisaha.exception.AuthException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
@@ -19,6 +22,11 @@ public class SahaService {
 
     public List<SahaResponse> tumSahalar() {
         List<HaliSaha> sahalar = HaliSaha.findAktifSahalar();
+        return sahalar.stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    public List<SahaResponse> tumSahalarPaged(int page, int size) {
+        List<HaliSaha> sahalar = HaliSaha.findAktifSahalarPaged(page, size);
         return sahalar.stream().map(this::toResponse).collect(Collectors.toList());
     }
 
@@ -84,6 +92,36 @@ public class SahaService {
         saha.persist();
 
         return toResponse(saha);
+    }
+
+    public List<SahaYorumResponse> sahaYorumlari(UUID sahaId) {
+        return SahaYorum.findBySahaId(sahaId)
+                .stream().map(SahaYorumResponse::from).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public SahaYorumResponse yorumEkle(UUID sahaId, SahaYorumRequest req, UUID kullaniciId) {
+        HaliSaha saha = HaliSaha.findById(sahaId);
+        if (saha == null) throw new AuthException("Saha bulunamadı", 404);
+        if (SahaYorum.kullaniciZatenYorumYaptiMi(sahaId, kullaniciId)) {
+            throw new AuthException("Bu sahayı zaten değerlendirdiniz", 409);
+        }
+
+        SahaYorum y = new SahaYorum();
+        y.sahaId = sahaId;
+        y.kullaniciId = kullaniciId;
+        y.puan = req.puan;
+        y.yorum = req.yorum;
+        y.persist();
+
+        double ort = SahaYorum.ortalamaPuan(sahaId);
+        long sayi = SahaYorum.count("sahaId = ?1", sahaId);
+        saha.puanOrtalamasi = java.math.BigDecimal.valueOf(ort).setScale(2, java.math.RoundingMode.HALF_UP);
+        saha.yorumSayisi = (int) sayi;
+        saha.persist();
+
+        y.kullanici = com.halisaha.entity.Kullanici.findById(kullaniciId);
+        return SahaYorumResponse.from(y);
     }
 
     public List<SahaResponse> sahalarAra(String query) {

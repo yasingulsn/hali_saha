@@ -69,6 +69,14 @@ public class HaliSaha extends PanacheEntityBase {
         return list("aktifMi", true);
     }
 
+    public static List<HaliSaha> findAktifSahalarPaged(int pageIndex, int pageSize) {
+        return find("aktifMi = true").page(pageIndex, pageSize).list();
+    }
+
+    public static long countAktifSahalar() {
+        return count("aktifMi", true);
+    }
+
     public static List<HaliSaha> ara(String query) {
         return list("aktifMi = true AND (LOWER(sahaAdi) LIKE ?1 OR LOWER(adres) LIKE ?1)",
                 "%" + query.toLowerCase() + "%");

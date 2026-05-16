@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../models/saha.dart';
+import '../models/saha_yorum.dart';
 import '../models/token_response.dart';
 import '../utils/constants.dart';
 import 'api_client.dart';
@@ -9,9 +10,10 @@ class SahaService {
 
   SahaService(this._apiClient);
 
-  Future<ApiResponse<List<Saha>>> tumSahalar() async {
+  Future<ApiResponse<List<Saha>>> tumSahalar({int page = 0, int size = 0}) async {
     try {
-      final response = await _apiClient.dio.get(ApiConstants.sahalar);
+      final queryParams = size > 0 ? {'page': page, 'size': size} : null;
+      final response = await _apiClient.dio.get(ApiConstants.sahalar, queryParameters: queryParams);
       return _parseListResponse(response);
     } on DioException catch (e) {
       return _handleError(e);
@@ -39,6 +41,36 @@ class SahaService {
         queryParameters: {'q': query},
       );
       return _parseListResponse(response);
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<List<SahaYorum>>> sahaYorumlari(String sahaId) async {
+    try {
+      final response = await _apiClient.dio.get('${ApiConstants.sahalar}/$sahaId/yorumlar');
+      final data = response.data;
+      final List<SahaYorum> yorumlar = data['veri'] != null
+          ? (data['veri'] as List).map((e) => SahaYorum.fromJson(e)).toList()
+          : [];
+      return ApiResponse(basarili: data['basarili'] ?? false, mesaj: data['mesaj'] ?? '', veri: yorumlar);
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  Future<ApiResponse<SahaYorum>> yorumEkle(String sahaId, int puan, String? yorum) async {
+    try {
+      final response = await _apiClient.dio.post(
+        '${ApiConstants.sahalar}/$sahaId/yorum',
+        data: {'puan': puan, if (yorum != null && yorum.isNotEmpty) 'yorum': yorum},
+      );
+      final data = response.data;
+      return ApiResponse(
+        basarili: data['basarili'] ?? false,
+        mesaj: data['mesaj'] ?? '',
+        veri: data['veri'] != null ? SahaYorum.fromJson(data['veri']) : null,
+      );
     } on DioException catch (e) {
       return _handleError(e);
     }

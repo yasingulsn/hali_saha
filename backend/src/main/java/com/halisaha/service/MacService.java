@@ -27,6 +27,15 @@ public class MacService {
         return maclar.stream().map(this::toResponse).collect(Collectors.toList());
     }
 
+    public List<MacResponse> acikMaclarPaged(int page, int size) {
+        List<Mac> maclar = Mac.findAcikMaclarPaged(page, size);
+        return maclar.stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    public long acikMacSayisi() {
+        return Mac.countAcikMaclar();
+    }
+
     public MacResponse macDetay(UUID macId) {
         Mac mac = Mac.findById(macId);
         if (mac == null) {
@@ -38,15 +47,15 @@ public class MacService {
     public List<MacResponse> kullaniciMaclari(UUID kullaniciId) {
         List<MacKatilimci> katilimlar = MacKatilimci.findByKullaniciId(kullaniciId);
         List<MacResponse> sonuc = new ArrayList<>();
+        java.time.LocalDate bugun = java.time.LocalDate.now();
 
         for (MacKatilimci k : katilimlar) {
             Mac mac = k.mac != null ? k.mac : Mac.findById(k.macId);
-            if (mac != null && !mac.macTarihi.isBefore(java.time.LocalDate.now())) {
+            if (mac != null && !mac.macTarihi.isBefore(bugun)) {
                 sonuc.add(toResponse(mac));
             }
         }
 
-        // Oluşturduğu maçları da ekle
         List<Mac> olusturduklari = Mac.findByOlusturanId(kullaniciId);
         for (Mac m : olusturduklari) {
             boolean zatenVar = sonuc.stream().anyMatch(r -> r.id.equals(m.id));
@@ -54,7 +63,29 @@ public class MacService {
                 sonuc.add(toResponse(m));
             }
         }
+        return sonuc;
+    }
 
+    public List<MacResponse> kullaniciGecmisMaclari(UUID kullaniciId) {
+        List<MacKatilimci> katilimlar = MacKatilimci.findByKullaniciId(kullaniciId);
+        List<MacResponse> sonuc = new ArrayList<>();
+        java.time.LocalDate bugun = java.time.LocalDate.now();
+
+        for (MacKatilimci k : katilimlar) {
+            Mac mac = k.mac != null ? k.mac : Mac.findById(k.macId);
+            if (mac != null && mac.macTarihi.isBefore(bugun)) {
+                sonuc.add(toResponse(mac));
+            }
+        }
+
+        List<Mac> olusturduklari = Mac.findGecmisByOlusturanId(kullaniciId);
+        for (Mac m : olusturduklari) {
+            boolean zatenVar = sonuc.stream().anyMatch(r -> r.id.equals(m.id));
+            if (!zatenVar) {
+                sonuc.add(toResponse(m));
+            }
+        }
+        sonuc.sort((a, b) -> b.macTarihi.compareTo(a.macTarihi));
         return sonuc;
     }
 
@@ -266,11 +297,62 @@ public class MacService {
         return toResponseWithKatilimcilar(mac);
     }
 
+    // ─── PUANLAMA ────────────────────────────────────────────────
+
+    @Transactional
+    public void oyuncuPuanla(UUID macId, UUID hedefId, int puan, UUID puanlayanId) {
+        Mac mac = Mac.findById(macId);
+        if (mac == null) throw new AuthException("Maç bulunamadı", 404);
+
+        // Puanlayan kişi bu maçta katılımcı olmalı
+        MacKatilimci puanlayan = MacKatilimci.findByMacIdAndKullaniciId(macId, puanlayanId);
+        if (puanlayan == null) throw new AuthException("Bu maçta katılımcı değilsiniz", 403);
+
+        // Hedef oyuncu da bu maçta katılımcı olmalı
+        MacKatilimci hedef = MacKatilimci.findByMacIdAndKullaniciId(macId, hedefId);
+        if (hedef == null) throw new AuthException("Bu oyuncu maçta katılımcı değil", 400);
+
+        if (puanlayanId.equals(hedefId)) throw new AuthException("Kendinize puan veremezsiniz", 400);
+
+        // Hedef kullanıcının disiplin puanını güncelle (ağırlıklı ortalama)
+        Kullanici kullanici = Kullanici.findById(hedefId);
+        if (kullanici == null) throw new AuthException("Kullanıcı bulunamadı", 404);
+
+        int mevcutYorumSayisi = kullanici.yorumSayisi != null ? kullanici.yorumSayisi : 0;
+        double mevcutPuan = kullanici.disiplinPuani != null ? kullanici.disiplinPuani.doubleValue() : 5.0;
+        double yeniPuan = (mevcutPuan * mevcutYorumSayisi + puan) / (mevcutYorumSayisi + 1);
+        yeniPuan = Math.max(1.0, Math.min(5.0, yeniPuan));
+
+        kullanici.disiplinPuani = new java.math.BigDecimal(yeniPuan).setScale(2, java.math.RoundingMode.HALF_UP);
+        kullanici.yorumSayisi = mevcutYorumSayisi + 1;
+        kullanici.persist();
+
+        bildirimService.bildirimOlustur(
+            hedefId,
+            "Disiplin Puanınız Güncellendi",
+            "Bir oyuncu sizi " + puan + " yıldız ile değerlendirdi. Güncel puanınız: " + String.format("%.2f", yeniPuan),
+            "PUAN",
+            macId.toString()
+        );
+    }
+
     // ─── ARAMA ───────────────────────────────────────────────────
 
     public List<MacResponse> maclarAra(String query) {
         List<Mac> maclar = Mac.ara(query);
         return maclar.stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public MacResponse skorGir(UUID macId, com.halisaha.dto.MacSkorRequest req, UUID kullaniciId) {
+        Mac mac = Mac.findById(macId);
+        if (mac == null) throw new com.halisaha.exception.AuthException("Maç bulunamadı", 404);
+        if (!mac.olusturanId.equals(kullaniciId))
+            throw new com.halisaha.exception.AuthException("Sadece maç organizatörü skor girebilir", 403);
+        mac.takim1Skor = req.takim1Skor;
+        mac.takim2Skor = req.takim2Skor;
+        mac.persist();
+        return toResponseWithKatilimcilar(mac);
     }
 
     public List<MacResponse> maclarKonumaGore(String il, String ilce) {

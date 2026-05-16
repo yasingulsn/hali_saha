@@ -53,4 +53,5 @@ public class MacKatilimci extends PanacheEntityBase {
     public static long countAktifKatilimcilar(UUID macId) {
         return count("macId = ?1 AND katilimDurumu = 'ONAYLANDI'", macId);
     }
+
 }

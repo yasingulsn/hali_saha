@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/mac.dart';
 import '../models/saha.dart';
+import '../models/saha_yorum.dart';
+import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/mac_service.dart';
 import '../services/saha_service.dart';
 import '../utils/theme.dart';
 import 'mac_detay_screen.dart';
 import 'mac_olustur_screen.dart';
+import 'rezervasyon_screen.dart';
 
 class SahaDetayScreen extends StatefulWidget {
   final String sahaId;
@@ -23,6 +27,7 @@ class _SahaDetayScreenState extends State<SahaDetayScreen> {
 
   Saha? _saha;
   List<Mac> _maclar = [];
+  List<SahaYorum> _yorumlar = [];
   bool _yukleniyor = true;
 
   static const _ozellikIkonlari = <String, IconData>{
@@ -54,11 +59,13 @@ class _SahaDetayScreenState extends State<SahaDetayScreen> {
   Future<void> _yukle() async {
     final sahaRes = await _sahaService.sahaDetay(widget.sahaId);
     final macRes = await _macService.sahaMaclari(widget.sahaId);
+    final yorumRes = await _sahaService.sahaYorumlari(widget.sahaId);
     if (mounted) {
       setState(() {
         _yukleniyor = false;
         if (sahaRes.basarili) _saha = sahaRes.veri;
         if (macRes.basarili && macRes.veri != null) _maclar = macRes.veri!;
+        if (yorumRes.basarili && yorumRes.veri != null) _yorumlar = yorumRes.veri!;
       });
     }
   }
@@ -90,7 +97,8 @@ class _SahaDetayScreenState extends State<SahaDetayScreen> {
                           ),
                         ),
                       ],
-                      SliverToBoxAdapter(child: _buildMacOlusturButon()),
+                      SliverToBoxAdapter(child: _buildButonlar()),
+                      SliverToBoxAdapter(child: _buildYorumlar()),
                       const SliverToBoxAdapter(child: SizedBox(height: 40)),
                     ],
                   ),
@@ -311,34 +319,230 @@ class _SahaDetayScreenState extends State<SahaDetayScreen> {
     );
   }
 
-  Widget _buildMacOlusturButon() {
+  Widget _buildYorumlar() {
+    final auth = context.read<AuthProvider>();
+    final isKullanici = auth.kullaniciTipi == 'KULLANICI';
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-      child: GestureDetector(
-        onTap: () async {
-          final result = await Navigator.push(context,
-            MaterialPageRoute(builder: (_) => MacOlusturScreen(onSaha: _saha)));
-          if (result == true) _yukle();
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            gradient: AppTheme.buttonGradient,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(color: AppTheme.primaryGreen.withOpacity(0.25), blurRadius: 12, offset: const Offset(0, 4)),
-            ],
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('Yorumlar', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+          const Spacer(),
+          if (isKullanici)
+            GestureDetector(
+              onTap: () => _yorumDialog(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.amber.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.amber.withOpacity(0.2)),
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.star_rounded, size: 14, color: AppTheme.amber),
+                  SizedBox(width: 6),
+                  Text('Değerlendir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.amber)),
+                ]),
+              ),
+            ),
+        ]),
+        const SizedBox(height: 12),
+        if (_yorumlar.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.cardDark,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withOpacity(0.03)),
+            ),
+            child: Center(child: Text('Henüz yorum yapılmamış',
+                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withOpacity(0.6)))),
+          )
+        else
+          ...(_yorumlar.map((y) => _buildYorumKart(y))),
+      ]),
+    );
+  }
+
+  Widget _buildYorumKart(SahaYorum y) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.cardDark,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.03)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: AppTheme.primaryGreen.withOpacity(0.1)),
+            child: Center(child: Text(
+              (y.kullaniciAdSoyad?.isNotEmpty == true ? y.kullaniciAdSoyad![0].toUpperCase() : '?'),
+              style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.primaryGreen),
+            )),
           ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_rounded, color: AppTheme.backgroundDark, size: 22),
-              SizedBox(width: 8),
-              Text('Bu Sahada Maç Oluştur',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.backgroundDark)),
-            ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(y.kullaniciAdSoyad ?? 'Anonim',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
           ),
+          Row(mainAxisSize: MainAxisSize.min, children: List.generate(5, (i) => Icon(
+            i < y.puan ? Icons.star_rounded : Icons.star_outline_rounded,
+            size: 14,
+            color: AppTheme.amber,
+          ))),
+          if (y.tarih != null) ...[
+            const SizedBox(width: 8),
+            Text(y.tarih!, style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.5))),
+          ],
+        ]),
+        if (y.yorum != null && y.yorum!.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(y.yorum!, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary.withOpacity(0.8), height: 1.4)),
+        ],
+      ]),
+    );
+  }
+
+  void _yorumDialog() {
+    int seciliPuan = 5;
+    final yorumCtrl = TextEditingController();
+    bool yukleniyor = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: AppTheme.cardDark,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [
+            Icon(Icons.star_rounded, color: AppTheme.amber, size: 22),
+            SizedBox(width: 10),
+            Text('Sahayı Değerlendir', style: TextStyle(color: AppTheme.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
+          ]),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (i) {
+                final y = i + 1;
+                return GestureDetector(
+                  onTap: () => setS(() => seciliPuan = y),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      y <= seciliPuan ? Icons.star_rounded : Icons.star_outline_rounded,
+                      color: AppTheme.amber, size: 36,
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: yorumCtrl,
+              maxLines: 3,
+              maxLength: 300,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Yorumunuz (isteğe bağlı)',
+                hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                filled: true,
+                fillColor: AppTheme.backgroundDark,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                counterStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+              ),
+            ),
+          ]),
+          actions: [
+            TextButton(
+              onPressed: yukleniyor ? null : () => Navigator.pop(ctx),
+              child: const Text('Vazgeç', style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.amber, foregroundColor: Colors.white),
+              onPressed: yukleniyor ? null : () async {
+                setS(() => yukleniyor = true);
+                final res = await _sahaService.yorumEkle(widget.sahaId, seciliPuan, yorumCtrl.text.trim());
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(res.mesaj),
+                    backgroundColor: res.basarili ? AppTheme.primaryGreen : AppTheme.errorRed,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ));
+                  if (res.basarili) _yukle();
+                }
+              },
+              child: yukleniyor
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Gönder'),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildButonlar() {
+    final isIsletme = context.read<AuthProvider>().kullaniciTipi == 'ISLETME';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      child: Column(
+        children: [
+          // Rezervasyon butonu (sadece kullanıcılar için)
+          if (!isIsletme && _saha != null && !(_saha!.kapaliMi)) ...[
+            GestureDetector(
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => RezervasyonScreen(saha: _saha!))),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [AppTheme.accentPurple, AppTheme.accentBlue]),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: AppTheme.accentPurple.withOpacity(0.25), blurRadius: 12, offset: const Offset(0, 4))],
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.calendar_month_rounded, color: Colors.white, size: 22),
+                    SizedBox(width: 8),
+                    Text('Rezervasyon Yap', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          // Maç oluştur butonu
+          GestureDetector(
+            onTap: () async {
+              final result = await Navigator.push(context,
+                MaterialPageRoute(builder: (_) => MacOlusturScreen(onSaha: _saha)));
+              if (result == true) _yukle();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                gradient: AppTheme.buttonGradient,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(color: AppTheme.primaryGreen.withOpacity(0.25), blurRadius: 12, offset: const Offset(0, 4))],
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_rounded, color: AppTheme.backgroundDark, size: 22),
+                  SizedBox(width: 8),
+                  Text('Bu Sahada Maç Oluştur', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.backgroundDark)),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

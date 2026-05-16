@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/token_response.dart';
 import '../providers/auth_provider.dart';
@@ -23,6 +25,8 @@ class _ProfilDuzenleScreenState extends State<ProfilDuzenleScreen> {
   late TextEditingController _dogumTarihiCtrl;
   String? _secilenPozisyon;
   bool _isLoading = false;
+  File? _secilenFoto;
+  String? _mevcutFotoUrl;
 
   static const _pozisyonlar = [
     {'value': 'KALECI', 'label': 'Kaleci', 'icon': Icons.sports_handball_rounded},
@@ -39,6 +43,7 @@ class _ProfilDuzenleScreenState extends State<ProfilDuzenleScreen> {
     _telefonCtrl = TextEditingController(text: p?.telefon ?? '');
     _dogumTarihiCtrl = TextEditingController(text: p?.dogumTarihi ?? '');
     _secilenPozisyon = p?.tercihEdilenPozisyon;
+    _mevcutFotoUrl = p?.profilFotoUrl;
   }
 
   @override
@@ -78,6 +83,42 @@ class _ProfilDuzenleScreenState extends State<ProfilDuzenleScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Profil Fotoğrafı ───────────────────────────────
+              Center(
+                child: GestureDetector(
+                  onTap: _fotoSecDialog,
+                  child: Stack(alignment: Alignment.bottomRight, children: [
+                    Container(
+                      width: 88, height: 88,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: AppTheme.primaryGradient,
+                        border: Border.all(color: AppTheme.primaryGreen.withOpacity(0.4), width: 3),
+                      ),
+                      child: _secilenFoto != null
+                          ? ClipOval(child: Image.file(_secilenFoto!, fit: BoxFit.cover))
+                          : _mevcutFotoUrl != null
+                              ? ClipOval(child: Image.network(_mevcutFotoUrl!, fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => _avatarHarf()))
+                              : _avatarHarf(),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryGreen,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.backgroundDark, width: 2),
+                      ),
+                      child: const Icon(Icons.camera_alt_rounded, size: 14, color: AppTheme.backgroundDark),
+                    ),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Center(child: Text('Fotoğrafı değiştir',
+                  style: TextStyle(fontSize: 12, color: AppTheme.primaryGreen.withOpacity(0.8)))),
+              const SizedBox(height: 24),
+
               // ── Ad Soyad ───────────────────────────────────────
               _buildSectionTitle('Ad Soyad'),
               const SizedBox(height: 8),
@@ -315,6 +356,53 @@ class _ProfilDuzenleScreenState extends State<ProfilDuzenleScreen> {
 
   // ─── KAYDET ───────────────────────────────────────────────────
 
+  Widget _avatarHarf() {
+    final ad = widget.profilDetay?.adSoyad ?? '?';
+    return Center(child: Text(ad[0].toUpperCase(),
+        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)));
+  }
+
+  void _fotoSecDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardDark,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library_rounded, color: AppTheme.primaryGreen),
+            title: const Text('Galeriden Seç', style: TextStyle(color: AppTheme.textPrimary)),
+            onTap: () async {
+              Navigator.pop(context);
+              final picker = ImagePicker();
+              final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 512, maxHeight: 512, imageQuality: 80);
+              if (picked != null && mounted) setState(() => _secilenFoto = File(picked.path));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.camera_alt_rounded, color: AppTheme.accentBlue),
+            title: const Text('Kameradan Çek', style: TextStyle(color: AppTheme.textPrimary)),
+            onTap: () async {
+              Navigator.pop(context);
+              final picker = ImagePicker();
+              final picked = await picker.pickImage(source: ImageSource.camera, maxWidth: 512, maxHeight: 512, imageQuality: 80);
+              if (picked != null && mounted) setState(() => _secilenFoto = File(picked.path));
+            },
+          ),
+          if (_mevcutFotoUrl != null || _secilenFoto != null)
+            ListTile(
+              leading: const Icon(Icons.delete_rounded, color: AppTheme.errorRed),
+              title: const Text('Fotoğrafı Kaldır', style: TextStyle(color: AppTheme.errorRed)),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() { _secilenFoto = null; _mevcutFotoUrl = null; });
+              },
+            ),
+        ]),
+      ),
+    );
+  }
+
   Future<void> _kaydet() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -329,6 +417,7 @@ class _ProfilDuzenleScreenState extends State<ProfilDuzenleScreen> {
           : _dogumTarihiCtrl.text.trim(),
       il: widget.profilDetay?.il,
       ilce: widget.profilDetay?.ilce,
+      profilFotoUrl: _mevcutFotoUrl,
     );
 
     if (mounted) {
